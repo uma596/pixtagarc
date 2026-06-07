@@ -323,6 +323,9 @@ public class MainController implements Initializable {
 
         // タグツリーのコンテキストメニュー（Star設定）
         setupTagTreeContextMenu();
+
+        // ツールチップ設定 (#30)
+        setupTooltips();
     }
 
     /**
@@ -522,6 +525,28 @@ public class MainController implements Initializable {
 
         tagContextMenu.getItems().add(starMenu);
         tagTreeView.setContextMenu(tagContextMenu);
+    }
+
+    /**
+     * 全UI要素にツールチップを設定する (#30)。
+     */
+    private void setupTooltips() {
+        keywordField.setTooltip(new Tooltip("キーワード検索（ファイル名・タグ・作者で全文検索）"));
+        tagFilterButton.setTooltip(new Tooltip("タグで絞り込み（複数選択可）"));
+        authorFilterCombo.setTooltip(new Tooltip("作者で絞り込み"));
+        starFilterCombo.setTooltip(new Tooltip("Star評価で絞り込み"));
+        excludeHiddenToggle.setTooltip(new Tooltip("非表示ファイルを検索結果から除外する"));
+        searchButton.setTooltip(new Tooltip("検索を実行 (Enter)"));
+        importButton.setTooltip(new Tooltip("フォルダからファイルをインポート"));
+        pdfExportButton.setTooltip(new Tooltip("検索結果をPDFに出力"));
+        pageSizeCombo.setTooltip(new Tooltip("1ページあたりの表示件数"));
+        prevPageButton.setTooltip(new Tooltip("前のページへ"));
+        nextPageButton.setTooltip(new Tooltip("次のページへ"));
+        thumbnailViewButton.setTooltip(new Tooltip("サムネイル表示に切り替え"));
+        listViewButton.setTooltip(new Tooltip("リスト表示に切り替え"));
+        thumbnailSizeCombo.setTooltip(new Tooltip("サムネイルの表示サイズ"));
+        savedSearchManageButton.setTooltip(new Tooltip("保存済み検索の管理"));
+        savedSearchCombo.setTooltip(new Tooltip("保存済み検索を読み込み"));
     }
 
     /**

@@ -131,9 +131,6 @@ public class ViewerController implements Initializable {
     /** 解像度ラベル。 */
     @FXML private Label resolutionLabel;
 
-    /** 非表示ToggleButton。 */
-    @FXML private ToggleButton hiddenToggle;
-
     /** トップ情報バー（表示/非表示切替対象）。 */
     @FXML private VBox topInfoBar;
 
@@ -205,6 +202,8 @@ public class ViewerController implements Initializable {
         setupClickNavigation();
         setupContextMenu();
         setupInfoBarToggle();
+        setupMouseTracking();
+        setupSwipeNavigation();
     }
 
     /**
@@ -256,10 +255,20 @@ public class ViewerController implements Initializable {
         imageAreaPane.sceneProperty().addListener((obs, oldScene, newScene) -> {
             if (newScene != null) {
                 newScene.setOnKeyPressed(event -> {
-                    switch (event.getCode()) {
-                        case LEFT, UP -> onPrev();
-                        case RIGHT, DOWN -> onNext();
-                        default -> { /* 他のキーは無視 */ }
+                    if (event.isControlDown()) {
+                        // Ctrl+Arrow: 作品ジャンプ (#16)
+                        switch (event.getCode()) {
+                            case RIGHT -> { nextWork(); event.consume(); }
+                            case LEFT -> { prevWork(); event.consume(); }
+                            default -> {}
+                        }
+                    } else {
+                        switch (event.getCode()) {
+                            case LEFT, UP -> onPrev();
+                            case RIGHT, DOWN -> onNext();
+                            case I -> toggleInfoBar();
+                            default -> { /* 他のキーは無視 */ }
+                        }
                     }
                 });
             }
@@ -340,7 +349,7 @@ public class ViewerController implements Initializable {
 
         MenuItem copyPath = new MenuItem("ファイルパスをコピー");
         copyPath.setOnAction(e -> {
-            ImageSummary current = viewerState != null ? viewerState.getCurrentImage() : null;
+            ImageSummary current = getContextMenuTarget();
             if (current != null) {
                 ClipboardContent content = new ClipboardContent();
                 content.putString(current.getFilePath());
@@ -350,7 +359,7 @@ public class ViewerController implements Initializable {
 
         MenuItem openInExplorer = new MenuItem("エクスプローラーで表示");
         openInExplorer.setOnAction(e -> {
-            ImageSummary current = viewerState != null ? viewerState.getCurrentImage() : null;
+            ImageSummary current = getContextMenuTarget();
             if (current != null) {
                 try {
                     File file = new File(current.getFilePath());
@@ -378,11 +387,12 @@ public class ViewerController implements Initializable {
             final int starValue = i;
             MenuItem starItem = new MenuItem(starLabels[i]);
             starItem.setOnAction(e -> {
-                ImageSummary current = viewerState != null ? viewerState.getCurrentImage() : null;
+                ImageSummary current = getContextMenuTarget();
                 if (current != null) {
                     try {
                         imageService.updateStar(current.getId(), starValue);
                         current.setStar(starValue);
+                        updateInfoBar(current);
                         log.info("Star評価を更新しました: id={}, star={}", current.getId(), starValue);
                     } catch (Exception ex) {
                         log.error("Star評価の更新に失敗しました", ex);
@@ -430,12 +440,29 @@ public class ViewerController implements Initializable {
         );
 
         imageAreaPane.setOnContextMenuRequested(event -> {
-            ImageSummary current = viewerState != null ? viewerState.getCurrentImage() : null;
+            // 見開き表示時はクリック位置から操作対象を判定
+            ImageSummary current;
+            if (viewerState != null && viewerState.getDisplayMode() == ViewerState.DisplayMode.SPREAD) {
+                // imageAreaPane内での相対X座標を計算して左右を判定
+                javafx.geometry.Bounds boundsInScreen = imageAreaPane.localToScreen(imageAreaPane.getBoundsInLocal());
+                double localX = event.getScreenX() - boundsInScreen.getMinX();
+                double midX = imageAreaPane.getWidth() / 2.0;
+                InfoSide clickSide = (localX < midX) ? InfoSide.LEFT : InfoSide.RIGHT;
+                activeSide = clickSide;
+                current = getSpreadImageForSide(clickSide);
+                log.debug("コンテキストメニュー左右判定: localX={}, midX={}, side={}, target={}",
+                        localX, midX, clickSide,
+                        current != null ? current.getFileName() : "null");
+            } else {
+                current = viewerState != null ? viewerState.getCurrentImage() : null;
+            }
             if (current != null) {
                 // 非表示フラグの状態でラベルを動的変更
                 toggleHidden.setText(current.isHidden() ? "非表示を解除" : "非表示にする");
                 // 作品未所属の場合はグレーアウト
                 openWork.setDisable(current.getWorkId() == null);
+                // 情報バーも同期
+                updateInfoBar(current);
             }
             // 情報バー・見開き状態を同期
             showInfoBarItem.setSelected(infoBarVisible);
@@ -459,7 +486,7 @@ public class ViewerController implements Initializable {
      * 新しいビューアウィンドウで開く。
      */
     private void onOpenWork() {
-        ImageSummary current = viewerState != null ? viewerState.getCurrentImage() : null;
+        ImageSummary current = getContextMenuTarget();
         if (current == null || current.getWorkId() == null) return;
 
         try {
@@ -508,7 +535,7 @@ public class ViewerController implements Initializable {
      * <p>ファイル自体は削除せず、DBレコードのみ削除する。
      */
     private void onDeleteImage() {
-        ImageSummary current = viewerState != null ? viewerState.getCurrentImage() : null;
+        ImageSummary current = getContextMenuTarget();
         if (current == null) return;
 
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
@@ -584,8 +611,13 @@ public class ViewerController implements Initializable {
             showSpreadPage();
         }
 
-        // 情報バーの更新
-        updateInfoBar(current);
+        // 情報バーの更新（見開き時はactiveSide側の画像情報を表示）
+        if (viewerState.getDisplayMode() == ViewerState.DisplayMode.SPREAD) {
+            ImageSummary sideImage = getSpreadImageForSide(activeSide);
+            updateInfoBar(sideImage != null ? sideImage : current);
+        } else {
+            updateInfoBar(current);
+        }
 
         // 先読み更新
         prefetchPages(viewerState.getCurrentIndex());
@@ -769,12 +801,36 @@ public class ViewerController implements Initializable {
     /**
      * 情報バーを更新する。
      *
+     * <p>タグ名が未ロードの場合はDBから遅延取得してキャッシュする。
+     * 見開き表示時のサイド切替でファイル名・作者も連動して更新する。
+     *
      * @param image 表示中の画像サマリー
      */
     private void updateInfoBar(ImageSummary image) {
+        // ファイル名・パス・解像度・非表示を更新
+        fileNameLabel.setText(image.getFileName());
         filePathLabel.setText(image.getFilePath());
         resolutionLabel.setText(image.getResolutionString());
-        hiddenToggle.setSelected(image.isHidden());
+
+        // 作者表示を更新
+        if (image.getAuthorName() != null && !image.getAuthorName().isEmpty()) {
+            authorCombo.setValue(image.getAuthorName());
+        } else {
+            authorCombo.setValue(null);
+            authorCombo.setPromptText("作者を選択...");
+        }
+
+        // タグ名が未ロードの場合はDBから遅延取得する
+        if (image.getTagNames().isEmpty() && image.getId() != null) {
+            try {
+                List<Tag> tags = tagService.getTagsForImage(image.getId());
+                image.setTagNames(tags.stream()
+                        .map(Tag::getName)
+                        .collect(java.util.stream.Collectors.toList()));
+            } catch (Exception e) {
+                log.warn("タグの遅延取得に失敗しました: imageId={}", image.getId(), e);
+            }
+        }
 
         // タグチップを更新
         tagChipsPane.getChildren().clear();
@@ -933,7 +989,7 @@ public class ViewerController implements Initializable {
      */
     @FXML
     private void onAddTag() {
-        ImageSummary current = viewerState != null ? viewerState.getCurrentImage() : null;
+        ImageSummary current = getContextMenuTarget();
         if (current == null) return;
         try {
             FXMLLoader loader = new FXMLLoader(
@@ -971,17 +1027,15 @@ public class ViewerController implements Initializable {
      */
     @FXML
     private void onToggleHidden() {
-        ImageSummary current = viewerState != null ? viewerState.getCurrentImage() : null;
+        ImageSummary current = getContextMenuTarget();
         if (current == null) return;
         try {
-            boolean newHidden = hiddenToggle.isSelected();
+            boolean newHidden = !current.isHidden();
             imageService.updateHidden(current.getId(), newHidden);
             current.setHidden(newHidden);
             log.info("非表示フラグを更新しました: id={}, isHidden={}", current.getId(), newHidden);
         } catch (Exception e) {
             log.error("非表示フラグの更新に失敗しました", e);
-            // 失敗した場合はトグルを元に戻す
-            hiddenToggle.setSelected(!hiddenToggle.isSelected());
         }
     }
 
@@ -1065,6 +1119,8 @@ public class ViewerController implements Initializable {
             String title = imageList.isEmpty() ? "ビューア"
                     : imageList.get(initialIndex).getFileName();
             stage.setTitle(title);
+            stage.setMinWidth(600);
+            stage.setMinHeight(400);
 
             double w = session.getWindowWidth() > 0 ? session.getWindowWidth() : 1000;
             double h = session.getWindowHeight() > 0 ? session.getWindowHeight() : 700;
@@ -1164,17 +1220,12 @@ public class ViewerController implements Initializable {
 
     /**
      * 情報バーの表示/非表示切替を初期設定する (#34)。
+    /**
+     * 情報バーの表示/非表示切替を初期設定する (#34)。
+     * I キーのハンドリングは setupKeyboardShortcuts() に統合済み。
      */
     private void setupInfoBarToggle() {
-        imageAreaPane.sceneProperty().addListener((obs, oldScene, newScene) -> {
-            if (newScene != null) {
-                newScene.setOnKeyPressed(event -> {
-                    if (event.getCode() == javafx.scene.input.KeyCode.I) {
-                        toggleInfoBar();
-                    }
-                });
-            }
-        });
+        // 何もしない（I キーは setupKeyboardShortcuts() で処理）
     }
 
     /**
@@ -1195,6 +1246,167 @@ public class ViewerController implements Initializable {
         topInfoBar.setManaged(infoBarVisible);
         bottomInfoBar.setVisible(infoBarVisible);
         bottomInfoBar.setManaged(infoBarVisible);
+    }
+
+    /**
+     * 見開き時のマウスオーバー側を追跡する (#33)。
+     */
+    private enum InfoSide { LEFT, RIGHT }
+    private InfoSide activeSide = InfoSide.LEFT;
+
+    private void setupMouseTracking() {
+        imageAreaPane.setOnMouseMoved(event -> {
+            if (viewerState == null) return;
+            if (viewerState.getDisplayMode() != ViewerState.DisplayMode.SPREAD) return;
+
+            double midX = imageAreaPane.getWidth() / 2.0;
+            InfoSide newSide = (event.getX() < midX) ? InfoSide.LEFT : InfoSide.RIGHT;
+
+            if (newSide != activeSide) {
+                activeSide = newSide;
+                ImageSummary target = getSpreadImageForSide(activeSide);
+                if (target != null) {
+                    updateInfoBar(target);
+                }
+            }
+        });
+    }
+
+    /**
+     * 見開き表示時に指定側の画像を返す。
+     */
+    private ImageSummary getSpreadImageForSide(InfoSide side) {
+        if (viewerState == null) return null;
+        int index = viewerState.getCurrentIndex();
+        int offset = viewerState.getPageOffset();
+        int adjustedIndex = index + offset;
+        List<ImageSummary> list = viewerState.getImageList();
+
+        if (viewerState.getBindingDirection() == ViewerState.BindingDirection.RIGHT_TO_LEFT) {
+            return (side == InfoSide.RIGHT) ? getImageAt(list, adjustedIndex)
+                                            : getImageAt(list, adjustedIndex + 1);
+        } else {
+            return (side == InfoSide.LEFT) ? getImageAt(list, adjustedIndex)
+                                           : getImageAt(list, adjustedIndex + 1);
+        }
+    }
+
+    /**
+     * コンテキストメニューの操作対象画像を返す。
+     *
+     * <p>見開き表示時は {@code activeSide}（直近の右クリック位置）に基づいて
+     * 左右どちらの画像を操作対象とするか決定する。
+     * 単ページ表示時は現在表示中の画像を返す。
+     *
+     * @return 操作対象の画像サマリー。取得できない場合は {@code null}。
+     */
+    private ImageSummary getContextMenuTarget() {
+        if (viewerState == null) return null;
+        if (viewerState.getDisplayMode() == ViewerState.DisplayMode.SPREAD) {
+            ImageSummary target = getSpreadImageForSide(activeSide);
+            return target != null ? target : viewerState.getCurrentImage();
+        }
+        return viewerState.getCurrentImage();
+    }
+
+    /**
+     * マウススワイプで次/前の作品にジャンプする (#16)。
+     */
+    private double swipeStartX;
+    private double swipeStartY;
+
+    private void setupSwipeNavigation() {
+        imageAreaPane.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_PRESSED, event -> {
+            swipeStartX = event.getScreenX();
+            swipeStartY = event.getScreenY();
+        });
+
+        imageAreaPane.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_RELEASED, event -> {
+            double deltaX = event.getScreenX() - swipeStartX;
+            double deltaY = event.getScreenY() - swipeStartY;
+
+            if (Math.abs(deltaX) > 100 && Math.abs(deltaX) > Math.abs(deltaY) * 2) {
+                if (deltaX > 0) {
+                    nextWork();
+                } else {
+                    prevWork();
+                }
+            }
+        });
+    }
+
+    /**
+     * 次の作品の先頭ページにジャンプする。
+     */
+    private void nextWork() {
+        if (viewerState == null) return;
+        int nextIndex = findNextWorkIndex(viewerState.getCurrentIndex());
+        if (nextIndex >= 0) {
+            viewerState.setCurrentIndex(nextIndex);
+            prefetchCache.clear();
+            updateDisplay();
+        }
+    }
+
+    /**
+     * 前の作品の先頭ページにジャンプする。
+     */
+    private void prevWork() {
+        if (viewerState == null) return;
+        int prevIndex = findPrevWorkIndex(viewerState.getCurrentIndex());
+        if (prevIndex >= 0) {
+            viewerState.setCurrentIndex(prevIndex);
+            prefetchCache.clear();
+            updateDisplay();
+        }
+    }
+
+    /**
+     * 検索結果リスト内で次の作品の先頭インデックスを返す。
+     */
+    private int findNextWorkIndex(int currentIndex) {
+        List<ImageSummary> images = viewerState.getImageList();
+        Long currentWorkId = images.get(currentIndex).getWorkId();
+
+        int i = currentIndex + 1;
+        while (i < images.size()) {
+            Long workId = images.get(i).getWorkId();
+            if (!java.util.Objects.equals(workId, currentWorkId)) {
+                return i;
+            }
+            if (currentWorkId == null) return i;
+            i++;
+        }
+        return -1;
+    }
+
+    /**
+     * 検索結果リスト内で前の作品の先頭インデックスを返す。
+     */
+    private int findPrevWorkIndex(int currentIndex) {
+        List<ImageSummary> images = viewerState.getImageList();
+        Long currentWorkId = images.get(currentIndex).getWorkId();
+
+        int groupStart = currentIndex;
+        if (currentWorkId != null) {
+            while (groupStart > 0 && java.util.Objects.equals(
+                    images.get(groupStart - 1).getWorkId(), currentWorkId)) {
+                groupStart--;
+            }
+        }
+
+        if (groupStart == 0) return -1;
+        int prevLast = groupStart - 1;
+        Long prevWorkId = images.get(prevLast).getWorkId();
+
+        int prevStart = prevLast;
+        if (prevWorkId != null) {
+            while (prevStart > 0 && java.util.Objects.equals(
+                    images.get(prevStart - 1).getWorkId(), prevWorkId)) {
+                prevStart--;
+            }
+        }
+        return prevStart;
     }
 
     /**

@@ -32,12 +32,9 @@
             </ToolBar>
 
             <!-- 検索バー -->
-            <HBox styleClass="search-bar" alignment="CENTER_LEFT" spacing="6">
-                <padding>
-                    <Insets top="6" right="8" bottom="6" left="8" />
-                </padding>
+            <ToolBar styleClass="search-bar">
                 <!-- キーワード入力（×クリアボタン付き） -->
-                <StackPane HBox.hgrow="ALWAYS" maxWidth="400">
+                <StackPane maxWidth="400" minWidth="150">
                     <TextField fx:id="keywordField" styleClass="search-field"
                                promptText="キーワードを入力..." minWidth="150"
                                style="-fx-padding: 4 24 4 4;"
@@ -63,7 +60,7 @@
                 <Label text="保存済み:" />
                 <ComboBox fx:id="savedSearchCombo" promptText="保存済み検索を選択..."
                           minWidth="180" onAction="#onLoadSavedSearch" />
-            </HBox>
+            </ToolBar>
         </VBox>
     </top>
 

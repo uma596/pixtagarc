@@ -84,7 +84,7 @@ public class MainApp extends Application {
             Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
             primaryStage.setTitle(APP_TITLE);
             primaryStage.setScene(scene);
-            primaryStage.setMinWidth(800);
+            primaryStage.setMinWidth(900);
             primaryStage.setMinHeight(600);
 
             // ウィンドウを閉じる際に Platform.exit() を呼び出す（stop()に処理を委譲）

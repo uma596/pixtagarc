@@ -132,8 +132,6 @@
                 <Label fx:id="resolutionLabel" text=""
                        style="-fx-text-fill: #bbbbbb;" />
                 <Region HBox.hgrow="ALWAYS" />
-                <ToggleButton fx:id="hiddenToggle" text="🚫 非表示"
-                              onAction="#onToggleHidden" />
             </HBox>
         </VBox>
     </bottom>
