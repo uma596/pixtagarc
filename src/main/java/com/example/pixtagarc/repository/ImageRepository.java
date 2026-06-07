@@ -207,6 +207,28 @@ public class ImageRepository {
     }
 
     /**
+     * 画像のページ番号を更新する。
+     *
+     * @param id         更新する画像ID
+     * @param pageNumber ページ番号（1始まり）
+     */
+    public void updatePageNumber(Long id, Integer pageNumber) {
+        String sql = "UPDATE images SET page_number=? WHERE id=?";
+        try (PreparedStatement ps = dbConfig.getConnection().prepareStatement(sql)) {
+            if (pageNumber != null) {
+                ps.setInt(1, pageNumber);
+            } else {
+                ps.setNull(1, java.sql.Types.INTEGER);
+            }
+            ps.setLong(2, id);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            log.error("ページ番号の更新に失敗しました: id={}", id, e);
+            throw new RuntimeException("ページ番号の更新に失敗しました", e);
+        }
+    }
+
+    /**
      * 画像の作品情報を更新する。
      *
      * @param id         更新する画像ID

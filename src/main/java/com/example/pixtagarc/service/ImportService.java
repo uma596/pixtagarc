@@ -105,6 +105,9 @@ public class ImportService extends Task<Void> {
     /** 全データクリア後に再インポートするかどうか。 */
     private final boolean clearAll;
 
+    /** フォルダごとに1作品としてまとめるかどうか。 */
+    private final boolean groupByFolder;
+
     /** 作者リポジトリ（クリア処理用）。 */
     private final com.example.pixtagarc.repository.AuthorRepository authorRepository;
 
@@ -127,6 +130,20 @@ public class ImportService extends Task<Void> {
     private final ConcurrentHashMap<String, Work> workCache = new ConcurrentHashMap<>();
 
     /**
+     * フォルダパス → 作品エンティティのキャッシュ（フォルダ作品化用）。
+     *
+     * <p>同一フォルダ内の複数ファイルで作品レコードの二重作成を防ぐ。
+     */
+    private final ConcurrentHashMap<String, Work> folderWorkCache = new ConcurrentHashMap<>();
+
+    /**
+     * フォルダ作品の external_id 採番用カウンター。
+     *
+     * <p>インポート開始時にDBの最大値を取得して初期化する。
+     */
+    private final java.util.concurrent.atomic.AtomicLong folderIdSequence = new java.util.concurrent.atomic.AtomicLong(0);
+
+    /**
      * コンストラクタ。
      *
      * @param imageRepository    画像リポジトリ
@@ -141,6 +158,7 @@ public class ImportService extends Task<Void> {
      * @param recursive          サブフォルダを含める場合 {@code true}
      * @param skipExisting       既存ファイルをスキップする場合 {@code true}
      * @param clearAll           全データクリア後に再インポートする場合 {@code true}
+     * @param groupByFolder      フォルダごとに1作品としてまとめる場合 {@code true}
      */
     public ImportService(ImageRepository imageRepository, ThumbnailService thumbnailService,
                          WorkRepository workRepository, ImageTagRepository imageTagRepository,
@@ -148,7 +166,7 @@ public class ImportService extends Task<Void> {
                          com.example.pixtagarc.repository.AuthorRepository authorRepository,
                          com.example.pixtagarc.config.DatabaseConfig dbConfig,
                          Path rootDirectory, boolean recursive, boolean skipExisting,
-                         boolean clearAll) {
+                         boolean clearAll, boolean groupByFolder) {
         this.imageRepository = imageRepository;
         this.thumbnailService = thumbnailService;
         this.workRepository = workRepository;
@@ -161,6 +179,7 @@ public class ImportService extends Task<Void> {
         this.recursive = recursive;
         this.skipExisting = skipExisting;
         this.clearAll = clearAll;
+        this.groupByFolder = groupByFolder;
     }
 
     /**
@@ -181,12 +200,19 @@ public class ImportService extends Task<Void> {
      */
     @Override
     protected Void call() throws Exception {
-        log.info("インポートを開始します: directory={}, recursive={}, clearAll={}", rootDirectory, recursive, clearAll);
+        log.info("インポートを開始します: directory={}, recursive={}, clearAll={}, groupByFolder={}",
+                rootDirectory, recursive, clearAll, groupByFolder);
 
         // 全データクリア処理
         if (clearAll) {
             updateMessage("全データをクリア中...");
             performClearAll();
+        }
+
+        // フォルダ作品化モードの連番初期化
+        if (groupByFolder) {
+            long maxId = workRepository.getMaxFolderExternalId();
+            folderIdSequence.set(maxId);
         }
 
         updateMessage("ファイルをスキャン中...");
@@ -286,6 +312,13 @@ public class ImportService extends Task<Void> {
         String summary = String.format("インポート完了: %d件インポート, %d件スキップ, %d件失敗",
                 imported.get(), skipped.get(), failed.get());
         log.info(summary);
+
+        // フォルダ作品化のページ番号を一括割り当て
+        if (groupByFolder && !folderWorkCache.isEmpty()) {
+            updateMessage("ページ番号を割り当て中...");
+            assignFolderPageNumbers();
+        }
+
         updateMessage(summary);
         updateProgress(total, total);
         return null;
@@ -497,6 +530,47 @@ public class ImportService extends Task<Void> {
             workId = work.getId();
         }
 
+        // フォルダ作品化モード: メタデータによる作品化が行われなかったファイルをフォルダ単位で作品化
+        if (groupByFolder && workId == null) {
+            Path parentDir = file.getParent();
+            if (parentDir != null) {
+                // recursive=OFF: ルート直下のファイルをルートフォルダ名で1作品化
+                // recursive=ON:  サブフォルダ内のファイルを各フォルダ名で作品化（ルート直下は作品未所属）
+                boolean shouldGroupAsWork;
+                if (!recursive) {
+                    // サブフォルダOFF: ルート直下のファイルを1作品としてまとめる
+                    shouldGroupAsWork = parentDir.equals(rootDirectory);
+                } else {
+                    // サブフォルダON: サブフォルダ内のファイルのみ作品化（ルート直下は未所属）
+                    shouldGroupAsWork = !parentDir.equals(rootDirectory);
+                }
+
+                if (shouldGroupAsWork) {
+                    String folderPath = parentDir.toAbsolutePath().toString();
+                    String folderName = parentDir.getFileName().toString();
+
+                    Work folderWork = folderWorkCache.computeIfAbsent(folderPath, key -> {
+                        long nextId = folderIdSequence.incrementAndGet();
+                        String externalId = String.format("F%010d", nextId);
+
+                        Work newWork = new Work();
+                        newWork.setTitle(folderName);
+                        newWork.setExternalId(externalId);
+                        newWork.setCreatedAt(java.time.LocalDateTime.now().format(DATETIME_FORMATTER));
+                        newWork.setUpdatedAt(newWork.getCreatedAt());
+                        synchronized (workRepository) {
+                            workRepository.save(newWork);
+                        }
+                        log.info("フォルダ作品を作成しました: title={}, externalId={}", folderName, externalId);
+                        return newWork;
+                    });
+
+                    workId = folderWork.getId();
+                    // ページ番号は後でassignFolderPageNumbersで一括設定するためここではnull
+                }
+            }
+        }
+
         // DBに登録
         Image image = new Image();
         image.setFilePath(filePath);
@@ -649,6 +723,28 @@ public class ImportService extends Task<Void> {
                         imageId, tagName, e);
             }
         }
+    }
+
+    /**
+     * フォルダ作品化時のページ番号を一括設定する。
+     *
+     * <p>インポート完了後に各フォルダ作品のページ番号をファイル名昇順で再付番する。
+     * 並列インポートでは挿入順が保証されないため、完了後に一括で割り当てる。
+     */
+    private void assignFolderPageNumbers() {
+        for (java.util.Map.Entry<String, Work> entry : folderWorkCache.entrySet()) {
+            Long wId = entry.getValue().getId();
+            List<com.example.pixtagarc.domain.Image> workImages = imageRepository.findByWorkId(wId);
+            // ファイル名昇順ソート
+            workImages.sort(java.util.Comparator.comparing(com.example.pixtagarc.domain.Image::getFileName));
+            for (int i = 0; i < workImages.size(); i++) {
+                imageRepository.updatePageNumber(workImages.get(i).getId(), i + 1);
+            }
+            // 総ページ数を更新
+            workRepository.updateTotalPages(wId, workImages.size());
+            log.debug("フォルダ作品のページ番号を割り当てました: workId={}, pages={}", wId, workImages.size());
+        }
+        log.info("フォルダ作品のページ番号割り当て完了: {}作品", folderWorkCache.size());
     }
 
     /**

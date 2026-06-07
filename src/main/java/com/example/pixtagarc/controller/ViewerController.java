@@ -183,6 +183,9 @@ public class ViewerController implements Initializable {
     /** タグ変更時にメイン画面に通知するコールバック。 */
     private Runnable onTagChangedCallback;
 
+    /** タグ使用履歴（メイン画面と共有）。 */
+    private com.example.pixtagarc.service.TagHistory tagHistory;
+
     /** このビューアのセッション情報（状態復元用）。 */
     private com.example.pixtagarc.dto.ViewerSession currentSession;
 
@@ -218,6 +221,11 @@ public class ViewerController implements Initializable {
 
         imageService = new ImageService(imageRepository);
         tagService = new TagService(tagRepository, imageTagRepository);
+
+        // タグ使用履歴の初期化
+        tagHistory = new com.example.pixtagarc.service.TagHistory();
+        tagHistory.loadFrom(com.example.pixtagarc.config.AppConfig.getInstance()
+                .getState(com.example.pixtagarc.config.AppConfig.KEY_TAG_HISTORY, ""));
 
         // VLCが利用可能な場合のみVideoPlayerServiceを初期化
         if (VlcConfig.isVlcAvailable()) {
@@ -341,6 +349,9 @@ public class ViewerController implements Initializable {
     private void setupContextMenu() {
         ContextMenu contextMenu = new ContextMenu();
 
+        // タグを追加サブメニュー (#36)
+        Menu addTagMenu = new Menu("タグを追加");
+
         MenuItem editTags = new MenuItem("タグを編集...");
         editTags.setOnAction(e -> onAddTag());
 
@@ -424,6 +435,7 @@ public class ViewerController implements Initializable {
         });
 
         contextMenu.getItems().addAll(
+                addTagMenu,
                 editTags,
                 toggleHidden,
                 starMenu,
@@ -461,6 +473,8 @@ public class ViewerController implements Initializable {
                 toggleHidden.setText(current.isHidden() ? "非表示を解除" : "非表示にする");
                 // 作品未所属の場合はグレーアウト
                 openWork.setDisable(current.getWorkId() == null);
+                // タグ追加サブメニューを動的に再構築 (#36)
+                rebuildViewerAddTagMenu(addTagMenu, current);
                 // 情報バーも同期
                 updateInfoBar(current);
             }
@@ -1415,6 +1429,119 @@ public class ViewerController implements Initializable {
     private void notifyTagChanged() {
         if (onTagChangedCallback != null) {
             onTagChangedCallback.run();
+        }
+    }
+
+    /**
+     * ビューアのコンテキストメニュー「タグを追加」サブメニューを動的に再構築する (#36)。
+     *
+     * <p>Star付きタグ上位5件 + 最近使用したタグ10件 + 「その他...」で構成する。
+     * 既に付与済みのタグには ✓ マークを付け、クリックで削除する。
+     *
+     * @param menu   再構築対象のMenuオブジェクト
+     * @param target 操作対象の画像サマリー
+     */
+    private void rebuildViewerAddTagMenu(Menu menu, ImageSummary target) {
+        menu.getItems().clear();
+        if (target == null) return;
+
+        // タグ名が未ロードの場合はDBから取得
+        if (target.getTagNames().isEmpty() && target.getId() != null) {
+            try {
+                List<Tag> tags = tagService.getTagsForImage(target.getId());
+                target.setTagNames(tags.stream()
+                        .map(Tag::getName)
+                        .collect(java.util.stream.Collectors.toList()));
+            } catch (Exception e) {
+                log.warn("タグの取得に失敗しました: imageId={}", target.getId(), e);
+            }
+        }
+        List<String> currentTagNames = target.getTagNames();
+
+        // 履歴を再読み込み（他画面で更新されている可能性）
+        tagHistory.loadFrom(com.example.pixtagarc.config.AppConfig.getInstance()
+                .getState(com.example.pixtagarc.config.AppConfig.KEY_TAG_HISTORY, ""));
+
+        // 1. Star付きタグ上位5件
+        List<Tag> starTags = tagService.findAll().stream()
+                .filter(t -> t.getStar() > 0)
+                .limit(5)
+                .collect(java.util.stream.Collectors.toList());
+
+        for (Tag tag : starTags) {
+            boolean hasTag = currentTagNames.contains(tag.getName());
+            MenuItem item = new MenuItem((hasTag ? "✓ " : "  ") + "★".repeat(tag.getStar()) + " " + tag.getName());
+            item.setOnAction(e -> toggleTagOnImage(target, tag.getName(), hasTag));
+            menu.getItems().add(item);
+        }
+
+        if (!starTags.isEmpty()) {
+            menu.getItems().add(new SeparatorMenuItem());
+        }
+
+        // 2. 最近使用したタグ（Star付きと重複除外、最大10件）
+        java.util.Set<String> starTagNames = starTags.stream()
+                .map(Tag::getName)
+                .collect(java.util.stream.Collectors.toSet());
+        List<String> recentTags = tagHistory.getRecent(10).stream()
+                .filter(name -> !starTagNames.contains(name))
+                .collect(java.util.stream.Collectors.toList());
+
+        for (String tagName : recentTags) {
+            boolean hasTag = currentTagNames.contains(tagName);
+            MenuItem item = new MenuItem((hasTag ? "✓ " : "  ") + tagName);
+            item.setOnAction(e -> toggleTagOnImage(target, tagName, hasTag));
+            menu.getItems().add(item);
+        }
+
+        if (!recentTags.isEmpty()) {
+            menu.getItems().add(new SeparatorMenuItem());
+        }
+
+        // 3. その他...（タグ編集ダイアログ）
+        MenuItem other = new MenuItem("その他...");
+        other.setOnAction(e -> onAddTag());
+        menu.getItems().add(other);
+    }
+
+    /**
+     * 画像にタグを追加/削除する（ビューアコンテキストメニューから） (#36)。
+     *
+     * @param target       操作対象の画像サマリー
+     * @param tagName      タグ名
+     * @param currentlyHas 現在付与済みかどうか
+     */
+    private void toggleTagOnImage(ImageSummary target, String tagName, boolean currentlyHas) {
+        try {
+            Tag tag = tagService.createOrGet(tagName);
+            DatabaseConfig dbConfig = DatabaseConfig.getInstance();
+            ImageTagRepository imageTagRepository = new ImageTagRepository(dbConfig);
+
+            if (currentlyHas) {
+                tagService.removeTagFromImage(target.getId(), tag.getId());
+            } else {
+                tagService.addTagToImage(target.getId(), tag.getId());
+                tagHistory.add(tagName);
+                com.example.pixtagarc.config.AppConfig.getInstance()
+                        .setState(com.example.pixtagarc.config.AppConfig.KEY_TAG_HISTORY, tagHistory.toCsv());
+            }
+            // FTS5更新
+            ImageRepository imageRepo = new ImageRepository(dbConfig);
+            com.example.pixtagarc.domain.Image image = imageRepo.findById(target.getId()).orElse(null);
+            if (image != null) {
+                String tagsText = imageTagRepository.getTagsTextForImage(target.getId());
+                imageRepo.insertFts(target.getId(), image.getFileName(), tagsText, "");
+            }
+            // タグリストを再取得して情報バーを更新
+            List<Tag> updatedTags = tagService.getTagsForImage(target.getId());
+            target.setTagNames(updatedTags.stream()
+                    .map(Tag::getName)
+                    .collect(java.util.stream.Collectors.toList()));
+            updateInfoBar(target);
+            // メイン画面に通知 (#28)
+            notifyTagChanged();
+        } catch (Exception ex) {
+            log.error("タグ操作に失敗しました: {}", tagName, ex);
         }
     }
 }

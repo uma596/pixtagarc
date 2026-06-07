@@ -31,6 +31,8 @@
                   style="-fx-text-fill: #bbbbbb;" />
         <CheckBox fx:id="skipExistingCheckBox" text="既にインポート済みのファイルをスキップ" selected="true"
                   style="-fx-text-fill: #bbbbbb;" />
+        <CheckBox fx:id="groupByFolderCheckBox" text="フォルダごとに1作品としてまとめる" selected="false"
+                  style="-fx-text-fill: #bbbbbb;" />
         <CheckBox fx:id="clearAllCheckBox" text="全データをクリアして再インポート ⚠" selected="false"
                   style="-fx-text-fill: #ff8888;" />
     </VBox>

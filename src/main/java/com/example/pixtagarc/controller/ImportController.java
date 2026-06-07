@@ -56,6 +56,9 @@ public class ImportController implements Initializable {
     /** 全データクリアチェックボックス。 */
     @FXML private CheckBox clearAllCheckBox;
 
+    /** フォルダごとに1作品としてまとめるチェックボックス。 */
+    @FXML private CheckBox groupByFolderCheckBox;
+
     /** 進捗ラベル。 */
     @FXML private Label progressLabel;
 
@@ -140,6 +143,8 @@ public class ImportController implements Initializable {
         selectFolderButton.setDisable(true);
         recursiveCheckBox.setDisable(true);
         skipExistingCheckBox.setDisable(true);
+        clearAllCheckBox.setDisable(true);
+        groupByFolderCheckBox.setDisable(true);
         cancelButton.setText("キャンセル");
 
         // インポートタスクを作成
@@ -181,7 +186,8 @@ public class ImportController implements Initializable {
                 Paths.get(folderPath),
                 recursiveCheckBox.isSelected(),
                 skipExistingCheckBox.isSelected(),
-                clearAll
+                clearAll,
+                groupByFolderCheckBox.isSelected()
         );
 
         // ProgressBarとラベルをタスクにバインド
@@ -228,6 +234,8 @@ public class ImportController implements Initializable {
         selectFolderButton.setDisable(false);
         recursiveCheckBox.setDisable(false);
         skipExistingCheckBox.setDisable(false);
+        clearAllCheckBox.setDisable(false);
+        groupByFolderCheckBox.setDisable(false);
         cancelButton.setText("閉じる");
         log.info("インポートが完了しました");
     }
@@ -246,6 +254,8 @@ public class ImportController implements Initializable {
         selectFolderButton.setDisable(false);
         recursiveCheckBox.setDisable(false);
         skipExistingCheckBox.setDisable(false);
+        clearAllCheckBox.setDisable(false);
+        groupByFolderCheckBox.setDisable(false);
         cancelButton.setText("閉じる");
     }
 
@@ -260,6 +270,8 @@ public class ImportController implements Initializable {
         selectFolderButton.setDisable(false);
         recursiveCheckBox.setDisable(false);
         skipExistingCheckBox.setDisable(false);
+        clearAllCheckBox.setDisable(false);
+        groupByFolderCheckBox.setDisable(false);
         cancelButton.setText("閉じる");
         log.info("インポートがキャンセルされました");
     }

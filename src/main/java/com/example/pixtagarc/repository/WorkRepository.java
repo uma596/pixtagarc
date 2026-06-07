@@ -174,6 +174,49 @@ public class WorkRepository {
     }
 
     /**
+     * フォルダ作品の external_id の最大連番を返す。
+     *
+     * <p>{@code external_id} が {@code 'F'} + 10桁数字の形式のレコードから最大値を取得する。
+     *
+     * @return 最大連番（存在しない場合は 0）
+     */
+    public long getMaxFolderExternalId() {
+        String sql = "SELECT MAX(CAST(SUBSTR(external_id, 2) AS INTEGER)) FROM works WHERE external_id LIKE 'F%'";
+        try (PreparedStatement ps = dbConfig.getConnection().prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                long value = rs.getLong(1);
+                return rs.wasNull() ? 0 : value;
+            }
+            return 0;
+        } catch (SQLException e) {
+            log.error("フォルダ作品の最大連番取得に失敗しました", e);
+            return 0;
+        }
+    }
+
+    /**
+     * 作品の総ページ数を更新する。
+     *
+     * @param id         作品ID
+     * @param totalPages 総ページ数
+     */
+    public void updateTotalPages(Long id, int totalPages) {
+        String sql = "UPDATE works SET total_pages = ?, updated_at = ? WHERE id = ?";
+        try (PreparedStatement ps = dbConfig.getConnection().prepareStatement(sql)) {
+            ps.setInt(1, totalPages);
+            ps.setString(2, java.time.LocalDateTime.now().format(
+                    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
+            ps.setLong(3, id);
+            ps.executeUpdate();
+            log.debug("作品の総ページ数を更新しました: id={}, totalPages={}", id, totalPages);
+        } catch (SQLException e) {
+            log.error("作品の総ページ数更新に失敗しました: id={}", id, e);
+            throw new RuntimeException("作品の総ページ数更新に失敗しました", e);
+        }
+    }
+
+    /**
      * ResultSetの現在行を {@link Work} エンティティにマッピングする。
      *
      * @param rs ResultSet
