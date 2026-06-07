@@ -782,7 +782,17 @@ public class MainController implements Initializable {
                 loadTagTree();
                 loadTagFilter();
             });
-            ViewerController.openNewWindow(fullResults, index, onTagChanged);
+
+            // セッション情報を構築 (#26)
+            com.example.pixtagarc.dto.ViewerSession session = new com.example.pixtagarc.dto.ViewerSession();
+            session.setMode("search");
+            session.setKeyword(currentCondition.getKeyword());
+            session.setTagIds(currentCondition.getTagIds());
+            session.setAuthorIds(currentCondition.getAuthorIds());
+            session.setMinStar(currentCondition.getMinStar());
+            session.setExcludeHidden(currentCondition.isExcludeHidden());
+
+            ViewerController.openNewWindow(fullResults, index, onTagChanged, session);
         } catch (Exception ex) {
             log.error("ビューアの起動に失敗しました", ex);
             showError("ビューアの起動に失敗しました", ex.getMessage());
@@ -802,6 +812,70 @@ public class MainController implements Initializable {
         // 復元した条件で検索実行
         currentCondition = buildSearchCondition();
         executeSearch(currentCondition);
+        // ビューアセッションの復元 (#26)
+        restoreViewerSessions();
+    }
+
+    /**
+     * 保存されたビューアセッションを復元する (#26)。
+     *
+     * <p>前回開いていたビューアを再検索して先頭ページから表示する。
+     */
+    private void restoreViewerSessions() {
+        List<com.example.pixtagarc.dto.ViewerSession> sessions =
+                com.example.pixtagarc.service.ViewerSessionManager.getInstance().getAll();
+        if (sessions.isEmpty()) return;
+
+        // 復元前にセッションリストをクリア（復元で再登録されるため）
+        com.example.pixtagarc.service.ViewerSessionManager.getInstance().clearAll();
+
+        Runnable onTagChanged = () -> Platform.runLater(() -> {
+            loadTagTree();
+            loadTagFilter();
+        });
+
+        for (com.example.pixtagarc.dto.ViewerSession session : sessions) {
+            try {
+                if ("work".equals(session.getMode()) && session.getWorkId() != null) {
+                    // 作品モード: work_id で画像リスト取得
+                    DatabaseConfig dbConfig = DatabaseConfig.getInstance();
+                    ImageRepository imageRepository = new ImageRepository(dbConfig);
+                    List<com.example.pixtagarc.domain.Image> workImages =
+                            imageRepository.findByWorkId(session.getWorkId());
+                    if (!workImages.isEmpty()) {
+                        List<ImageSummary> summaryList = new ArrayList<>();
+                        for (com.example.pixtagarc.domain.Image img : workImages) {
+                            ImageSummary s = new ImageSummary();
+                            s.setId(img.getId());
+                            s.setFilePath(img.getFilePath());
+                            s.setFileName(img.getFileName());
+                            s.setFileSize(img.getFileSize());
+                            s.setWidth(img.getWidth());
+                            s.setHeight(img.getHeight());
+                            s.setMediaType(img.getMediaType());
+                            s.setHidden(img.isHidden());
+                            s.setCreatedAt(img.getCreatedAt());
+                            s.setStar(img.getStar());
+                            s.setWorkId(img.getWorkId());
+                            s.setPageNumber(img.getPageNumber());
+                            s.setTagNames(new ArrayList<>());
+                            summaryList.add(s);
+                        }
+                        ViewerController.openNewWindow(summaryList, 0, onTagChanged, session);
+                    }
+                } else {
+                    // 検索モード: 条件で再検索
+                    SearchCondition condition = session.toSearchCondition();
+                    List<ImageSummary> results = searchService.searchForViewer(condition);
+                    if (!results.isEmpty()) {
+                        ViewerController.openNewWindow(results, 0, onTagChanged, session);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("ビューアセッションの復元に失敗しました", e);
+            }
+        }
+        log.info("ビューアセッションを{}件復元しました", sessions.size());
     }
 
     /**

@@ -186,6 +186,9 @@ public class ViewerController implements Initializable {
     /** タグ変更時にメイン画面に通知するコールバック。 */
     private Runnable onTagChangedCallback;
 
+    /** このビューアのセッション情報（状態復元用）。 */
+    private com.example.pixtagarc.dto.ViewerSession currentSession;
+
     /**
      * コントローラーを初期化する。
      *
@@ -987,9 +990,7 @@ public class ViewerController implements Initializable {
      */
     @FXML
     private void onClose() {
-        if (videoPlayerService != null) {
-            videoPlayerService.release();
-        }
+        onCloseInternal();
         Stage stage = (Stage) closeButton.getScene().getWindow();
         stage.close();
     }
@@ -1015,6 +1016,19 @@ public class ViewerController implements Initializable {
      * @param onTagChanged     タグ変更時にメイン画面に通知するコールバック
      */
     public static void openNewWindow(List<ImageSummary> imageList, int initialIndex, Runnable onTagChanged) {
+        openNewWindow(imageList, initialIndex, onTagChanged, null);
+    }
+
+    /**
+     * 新しいビューアウィンドウを開く（セッション指定付き）。
+     *
+     * @param imageList        表示する画像リスト
+     * @param initialIndex     初期表示インデックス
+     * @param onTagChanged     タグ変更時コールバック
+     * @param session          復元用セッション（新規の場合はnull → 自動生成）
+     */
+    public static void openNewWindow(List<ImageSummary> imageList, int initialIndex,
+                                     Runnable onTagChanged, com.example.pixtagarc.dto.ViewerSession session) {
         try {
             FXMLLoader loader = new FXMLLoader(
                     ViewerController.class.getResource("/fxml/viewer.fxml"));
@@ -1036,12 +1050,32 @@ public class ViewerController implements Initializable {
             controller.infoBarVisible = Boolean.parseBoolean(infoBarSetting);
             controller.applyInfoBarVisibility();
 
+            // セッション登録 (#26)
+            if (session == null) {
+                session = new com.example.pixtagarc.dto.ViewerSession();
+                session.setMode("search");
+            }
+            controller.currentSession = session;
+            com.example.pixtagarc.service.ViewerSessionManager.getInstance().add(session);
+
             Stage stage = new Stage();
             String title = imageList.isEmpty() ? "ビューア"
                     : imageList.get(initialIndex).getFileName();
             stage.setTitle(title);
-            stage.setScene(new javafx.scene.Scene(root, 1000, 700));
+
+            double w = session.getWindowWidth() > 0 ? session.getWindowWidth() : 1000;
+            double h = session.getWindowHeight() > 0 ? session.getWindowHeight() : 700;
+            stage.setScene(new javafx.scene.Scene(root, w, h));
+            if (session.getWindowX() > 0 || session.getWindowY() > 0) {
+                stage.setX(session.getWindowX());
+                stage.setY(session.getWindowY());
+            }
             stage.show();
+
+            // ウィンドウ閉じる時にセッション削除
+            stage.setOnCloseRequest(event -> {
+                controller.onCloseInternal();
+            });
 
             // 先読み開始
             controller.prefetchPages(initialIndex);
@@ -1051,6 +1085,18 @@ public class ViewerController implements Initializable {
         } catch (Exception e) {
             LoggerFactory.getLogger(ViewerController.class)
                     .error("ビューアウィンドウの表示に失敗しました", e);
+        }
+    }
+
+    /**
+     * ビューアを閉じる内部処理（セッション削除含む）。
+     */
+    private void onCloseInternal() {
+        if (currentSession != null) {
+            com.example.pixtagarc.service.ViewerSessionManager.getInstance().remove(currentSession);
+        }
+        if (videoPlayerService != null) {
+            videoPlayerService.release();
         }
     }
 
