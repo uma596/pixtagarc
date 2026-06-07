@@ -75,6 +75,9 @@ public class AppConfig {
     /** サムネイルサイズの状態保持キー。 */
     public static final String KEY_STATE_THUMBNAIL_SIZE = "state.thumbnail_size";
 
+    /** タグ使用履歴の保持キー。 */
+    public static final String KEY_TAG_HISTORY = "tag.history";
+
     // ===== 定数 =====
 
     /** サムネイル小サイズ（ピクセル）。 */

@@ -178,6 +178,9 @@ public class MainController implements Initializable {
     /** 画像サービス。 */
     private ImageService imageService;
 
+    /** タグ使用履歴。 */
+    private TagHistory tagHistory;
+
     // ===== 状態 =====
 
     /** メイン画面の表示状態。 */
@@ -247,6 +250,10 @@ public class MainController implements Initializable {
         authorService = new AuthorService(authorRepository);
         savedSearchService = new SavedSearchService(savedSearchRepository);
         imageService = new ImageService(imageRepository);
+
+        // タグ使用履歴の読み込み
+        tagHistory = new TagHistory();
+        tagHistory.loadFrom(AppConfig.getInstance().getState(AppConfig.KEY_TAG_HISTORY, ""));
     }
 
     /**
@@ -307,6 +314,9 @@ public class MainController implements Initializable {
 
         // コンテキストメニューの設定
         setupContextMenu();
+
+        // タグツリーのコンテキストメニュー（Star設定）
+        setupTagTreeContextMenu();
     }
 
     /**
@@ -429,10 +439,14 @@ public class MainController implements Initializable {
             }
         });
 
+        // タグを追加サブメニュー（動的に構築）
+        Menu addTagMenu = new Menu("タグを追加");
+
         contextMenu.getItems().addAll(
                 openViewer,
                 openWork,
                 new SeparatorMenuItem(),
+                addTagMenu,
                 editTags,
                 toggleHidden,
                 toggleHiddenWork,
@@ -460,6 +474,8 @@ public class MainController implements Initializable {
                 toggleHiddenWork.setDisable(selected.getWorkId() == null);
                 applyTagsToWork.setDisable(selected.getWorkId() == null);
                 applyStarToWork.setDisable(selected.getWorkId() == null);
+                // タグ追加サブメニューを動的に再構築
+                rebuildAddTagMenu(addTagMenu, selected);
             } else {
                 openWork.setDisable(true);
                 toggleHiddenWork.setDisable(true);
@@ -470,6 +486,120 @@ public class MainController implements Initializable {
 
         // サムネイル用のコンテキストメニューを保持（createThumbnailCellで使用）
         this.thumbnailContextMenu = contextMenu;
+    }
+
+    /**
+     * タグツリーのコンテキストメニュー（Star設定）を構築する。
+     */
+    private void setupTagTreeContextMenu() {
+        ContextMenu tagContextMenu = new ContextMenu();
+
+        Menu starMenu = new Menu("Star を設定");
+        String[] labels = {"☆ なし", "★ 1", "★★ 2", "★★★ 3", "★★★★ 4", "★★★★★ 5"};
+        for (int i = 0; i <= 5; i++) {
+            final int starValue = i;
+            MenuItem item = new MenuItem(labels[i]);
+            item.setOnAction(e -> {
+                TreeItem<String> selected = tagTreeView.getSelectionModel().getSelectedItem();
+                if (selected != null && selected.getParent() != null) {
+                    String tagName = selected.getValue().replaceFirst("^★+ ", "");
+                    tagService.findByName(tagName).ifPresent(tag -> {
+                        tagService.updateStar(tag.getId(), starValue);
+                        loadTagTree();
+                        loadTagFilter();
+                        statusMessageLabel.setText("タグ「" + tagName + "」のStarを★" + starValue + "に設定しました");
+                    });
+                }
+            });
+            starMenu.getItems().add(item);
+        }
+
+        tagContextMenu.getItems().add(starMenu);
+        tagTreeView.setContextMenu(tagContextMenu);
+    }
+
+    /**
+     * 「タグを追加」サブメニューを動的に再構築する (#19)。
+     *
+     * @param menu   再構築対象のMenuオブジェクト
+     * @param target 対象画像サマリー
+     */
+    private void rebuildAddTagMenu(Menu menu, ImageSummary target) {
+        menu.getItems().clear();
+        List<String> currentTagNames = target.getTagNames() != null ? target.getTagNames() : List.of();
+
+        // 1. Star付きタグ上位5件
+        List<Tag> starTags = tagService.findAll().stream()
+                .filter(t -> t.getStar() > 0)
+                .limit(5)
+                .collect(Collectors.toList());
+
+        for (Tag tag : starTags) {
+            boolean hasTag = currentTagNames.contains(tag.getName());
+            MenuItem item = new MenuItem((hasTag ? "✓ " : "  ") + "★".repeat(tag.getStar()) + " " + tag.getName());
+            item.setOnAction(e -> toggleTagOnImage(target, tag.getName(), hasTag));
+            menu.getItems().add(item);
+        }
+
+        menu.getItems().add(new SeparatorMenuItem());
+
+        // 2. 最近使用したタグ（Star付きと重複除外、最大10件）
+        java.util.Set<String> starTagNames = starTags.stream()
+                .map(Tag::getName).collect(java.util.stream.Collectors.toSet());
+        List<String> recentTags = tagHistory.getRecent(10).stream()
+                .filter(name -> !starTagNames.contains(name))
+                .collect(Collectors.toList());
+
+        for (String tagName : recentTags) {
+            boolean hasTag = currentTagNames.contains(tagName);
+            MenuItem item = new MenuItem((hasTag ? "✓ " : "  ") + tagName);
+            item.setOnAction(e -> toggleTagOnImage(target, tagName, hasTag));
+            menu.getItems().add(item);
+        }
+
+        menu.getItems().add(new SeparatorMenuItem());
+
+        // 3. その他...（タグ編集ダイアログ）
+        MenuItem other = new MenuItem("その他...");
+        other.setOnAction(e -> onEditTagsFromMain());
+        menu.getItems().add(other);
+    }
+
+    /**
+     * 画像にタグを追加/削除する（コンテキストメニューから）。
+     *
+     * @param target     対象画像サマリー
+     * @param tagName    タグ名
+     * @param currentlyHas 現在付与済みかどうか
+     */
+    private void toggleTagOnImage(ImageSummary target, String tagName, boolean currentlyHas) {
+        try {
+            Tag tag = tagService.createOrGet(tagName);
+            DatabaseConfig dbConfig = DatabaseConfig.getInstance();
+            ImageTagRepository imageTagRepository = new ImageTagRepository(dbConfig);
+
+            if (currentlyHas) {
+                tagService.removeTagFromImage(target.getId(), tag.getId());
+                statusMessageLabel.setText("タグ「" + tagName + "」を削除しました");
+            } else {
+                tagService.addTagToImage(target.getId(), tag.getId());
+                tagHistory.add(tagName);
+                AppConfig.getInstance().setState(AppConfig.KEY_TAG_HISTORY, tagHistory.toCsv());
+                statusMessageLabel.setText("タグ「" + tagName + "」を追加しました");
+            }
+            // FTS5更新
+            ImageRepository imageRepository = new ImageRepository(dbConfig);
+            com.example.pixtagarc.domain.Image image = imageRepository.findById(target.getId()).orElse(null);
+            if (image != null) {
+                String tagsText = imageTagRepository.getTagsTextForImage(target.getId());
+                imageRepository.insertFts(target.getId(), image.getFileName(), tagsText, "");
+            }
+            // タグリスト更新
+            loadTagTree();
+            loadTagFilter();
+        } catch (Exception ex) {
+            log.error("タグ操作に失敗しました: {}", tagName, ex);
+        }
     }
 
     /** サムネイルセルに右クリックメニューを提供するためのコンテキストメニュー参照。 */
@@ -677,7 +807,8 @@ public class MainController implements Initializable {
             TreeItem<String> root = tagTreeView.getRoot();
             root.getChildren().clear();
             for (Tag tag : tags) {
-                TreeItem<String> item = new TreeItem<>(tag.getName());
+                String label = (tag.getStar() > 0 ? "★".repeat(tag.getStar()) + " " : "") + tag.getName();
+                TreeItem<String> item = new TreeItem<>(label);
                 root.getChildren().add(item);
             }
         } catch (Exception e) {
@@ -1304,7 +1435,10 @@ public class MainController implements Initializable {
     private void onTagTreeClicked() {
         TreeItem<String> selected = tagTreeView.getSelectionModel().getSelectedItem();
         if (selected != null && selected.getParent() != null) {
-            keywordField.setText(selected.getValue());
+            // Star前置を除去してタグ名を抽出
+            String label = selected.getValue();
+            String tagName = label.replaceFirst("^★+ ", "");
+            keywordField.setText(tagName);
             onSearch();
         }
     }
