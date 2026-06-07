@@ -28,8 +28,10 @@ ehthumbs.db
 application-local.properties
 application-local.yml
 
-# Kiro 設定・ドキュメント
-.kiro/
+# Kiro 設定（steeringはバージョン管理する。ただしbuild-guideはローカル専用）
+.kiro/specs/
+.kiro/settings/
+.kiro/steering/build-guide.md
 docs/
 
 # インポートサンプルファイル（テスト用画像・動画）
