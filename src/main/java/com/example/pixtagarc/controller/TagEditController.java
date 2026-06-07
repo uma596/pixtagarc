@@ -154,11 +154,31 @@ public class TagEditController implements Initializable {
                 tagService.addTagToImage(imageId, tag.getId());
                 loadCurrentTags();
                 updateFtsIndex();
+                // タグ使用履歴に追加
+                addToTagHistory(tagName);
                 log.info("タグを追加しました: imageId={}, tagName={}", imageId, tagName);
             }
         } catch (Exception e) {
             log.error("タグの追加に失敗しました: tagName={}", tagName, e);
             showError("タグの追加に失敗しました", e.getMessage());
+        }
+    }
+
+    /**
+     * タグ使用履歴に追加する（settings.properties に即時保存）。
+     *
+     * @param tagName タグ名
+     */
+    private void addToTagHistory(String tagName) {
+        try {
+            com.example.pixtagarc.config.AppConfig config = com.example.pixtagarc.config.AppConfig.getInstance();
+            String csv = config.getState(com.example.pixtagarc.config.AppConfig.KEY_TAG_HISTORY, "");
+            com.example.pixtagarc.service.TagHistory history = new com.example.pixtagarc.service.TagHistory();
+            history.loadFrom(csv);
+            history.add(tagName);
+            config.setState(com.example.pixtagarc.config.AppConfig.KEY_TAG_HISTORY, history.toCsv());
+        } catch (Exception e) {
+            log.debug("タグ履歴の更新に失敗しました（無視）: {}", tagName, e);
         }
     }
 

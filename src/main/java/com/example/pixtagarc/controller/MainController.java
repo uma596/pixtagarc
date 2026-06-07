@@ -534,6 +534,9 @@ public class MainController implements Initializable {
         menu.getItems().clear();
         List<String> currentTagNames = target.getTagNames() != null ? target.getTagNames() : List.of();
 
+        // タグ履歴をsettings.propertiesから再読み込み（他画面で更新されている可能性）
+        tagHistory.loadFrom(AppConfig.getInstance().getState(AppConfig.KEY_TAG_HISTORY, ""));
+
         // 1. Star付きタグ上位5件
         List<Tag> starTags = tagService.findAll().stream()
                 .filter(t -> t.getStar() > 0)

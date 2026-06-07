@@ -1072,9 +1072,11 @@ public class ViewerController implements Initializable {
             }
             stage.show();
 
-            // ウィンドウ閉じる時にセッション削除
+            // ウィンドウ閉じる時（タスクバー等）はリソース解放のみ。セッションは残す（次回復元用）
             stage.setOnCloseRequest(event -> {
-                controller.onCloseInternal();
+                if (controller.videoPlayerService != null) {
+                    controller.videoPlayerService.release();
+                }
             });
 
             // 先読み開始
@@ -1089,11 +1091,15 @@ public class ViewerController implements Initializable {
     }
 
     /**
-     * ビューアを閉じる内部処理（セッション削除含む）。
+     * ビューアを閉じる内部処理。
+     *
+     * <p>ビューアを明示的に「閉じる」ボタンで閉じた場合のみセッションを削除する。
+     * タスクバー等からの強制終了時はセッションが残り、次回起動時に復元される。
      */
     private void onCloseInternal() {
         if (currentSession != null) {
             com.example.pixtagarc.service.ViewerSessionManager.getInstance().remove(currentSession);
+            currentSession = null;
         }
         if (videoPlayerService != null) {
             videoPlayerService.release();
