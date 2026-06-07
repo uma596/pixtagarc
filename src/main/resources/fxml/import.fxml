@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<VBox xmlns="http://javafx.com/javafx/21"
+      xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.example.pixtagarc.controller.ImportController"
+      spacing="12" minWidth="400" maxWidth="500"
+      stylesheets="@../css/app.css"
+      style="-fx-background-color: #3c3f41; -fx-padding: 16;">
+
+    <!-- タイトル -->
+    <Label text="フォルダのインポート"
+           style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #bbbbbb;" />
+
+    <Separator />
+
+    <!-- フォルダ選択 -->
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="フォルダ:" style="-fx-text-fill: #aaaaaa;" />
+        <TextField fx:id="folderPathField" promptText="フォルダを選択してください..."
+                   HBox.hgrow="ALWAYS" editable="false" />
+        <Button fx:id="selectFolderButton" text="参照..." onAction="#onSelectFolder" />
+    </HBox>
+
+    <!-- オプション -->
+    <VBox spacing="6">
+        <CheckBox fx:id="recursiveCheckBox" text="サブフォルダも含める" selected="true"
+                  style="-fx-text-fill: #bbbbbb;" />
+        <CheckBox fx:id="skipExistingCheckBox" text="既にインポート済みのファイルをスキップ" selected="true"
+                  style="-fx-text-fill: #bbbbbb;" />
+    </VBox>
+
+    <Separator />
+
+    <!-- 進捗表示 -->
+    <VBox spacing="6">
+        <Label fx:id="progressLabel" text="待機中..."
+               style="-fx-text-fill: #aaaaaa;" />
+        <ProgressBar fx:id="progressBar" progress="0" maxWidth="Infinity" />
+        <Label fx:id="detailLabel" text=""
+               style="-fx-text-fill: #888888; -fx-font-size: 11px;" />
+    </VBox>
+
+    <Separator />
+
+    <!-- ボタン行 -->
+    <HBox spacing="8" alignment="CENTER_RIGHT">
+        <Button fx:id="startButton" text="インポート開始" onAction="#onStartImport"
+                defaultButton="true"
+                style="-fx-background-color: #4a9eff; -fx-text-fill: #ffffff;" />
+        <Button fx:id="cancelButton" text="キャンセル" onAction="#onCancel" />
+    </HBox>
+
+</VBox>

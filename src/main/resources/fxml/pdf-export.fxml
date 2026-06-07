@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<VBox xmlns="http://javafx.com/javafx/21"
+      xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.example.pixtagarc.controller.PdfExportController"
+      spacing="12" minWidth="420"
+      stylesheets="@../css/app.css"
+      style="-fx-background-color: #3c3f41; -fx-padding: 16;">
+
+    <!-- タイトル -->
+    <Label text="PDF出力"
+           style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #bbbbbb;" />
+
+    <Separator />
+
+    <!-- 対象画像数 -->
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="対象画像数:" style="-fx-text-fill: #aaaaaa;" />
+        <Label fx:id="imageCountLabel" text="0 件"
+               style="-fx-text-fill: #bbbbbb; -fx-font-weight: bold;" />
+    </HBox>
+
+    <!-- 用紙サイズ -->
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="用紙サイズ:" minWidth="120" style="-fx-text-fill: #aaaaaa;" />
+        <ComboBox fx:id="paperSizeCombo" minWidth="150" />
+    </HBox>
+
+    <!-- 1ページあたりの枚数 -->
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="1ページあたり:" minWidth="120" style="-fx-text-fill: #aaaaaa;" />
+        <Spinner fx:id="imagesPerPageSpinner" min="1" max="16" initialValue="1"
+                 editable="true" minWidth="80" />
+        <Label text="枚" style="-fx-text-fill: #aaaaaa;" />
+    </HBox>
+
+    <!-- 画像フィット方法 -->
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="画像フィット:" minWidth="120" style="-fx-text-fill: #aaaaaa;" />
+        <ComboBox fx:id="fitModeCombo" minWidth="150" />
+    </HBox>
+
+    <Separator />
+
+    <!-- 出力先 -->
+    <VBox spacing="6">
+        <Label text="出力先:" style="-fx-text-fill: #aaaaaa;" />
+        <HBox spacing="8" alignment="CENTER_LEFT">
+            <TextField fx:id="outputPathField" promptText="出力先ファイルパス..."
+                       HBox.hgrow="ALWAYS" />
+            <Button fx:id="browseButton" text="参照..." onAction="#onBrowse" />
+        </HBox>
+    </VBox>
+
+    <Separator />
+
+    <!-- 進捗 -->
+    <VBox spacing="6">
+        <Label fx:id="exportProgressLabel" text=""
+               style="-fx-text-fill: #aaaaaa;" />
+        <ProgressBar fx:id="exportProgressBar" progress="0" maxWidth="Infinity"
+                     visible="false" />
+    </VBox>
+
+    <!-- ボタン行 -->
+    <HBox spacing="8" alignment="CENTER_RIGHT">
+        <Button fx:id="exportButton" text="PDF出力実行" onAction="#onExport"
+                defaultButton="true"
+                style="-fx-background-color: #4a9eff; -fx-text-fill: #ffffff;" />
+        <Button fx:id="cancelButton" text="キャンセル" onAction="#onCancel" />
+    </HBox>
+
+</VBox>

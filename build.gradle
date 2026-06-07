@@ -1,0 +1,260 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
+}
+
+group = 'com.example'
+version = '1.0.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+application {
+    mainClass = 'com.example.pixtagarc.MainApp'
+}
+
+javafx {
+    version = '21'
+    modules = ['javafx.controls', 'javafx.fxml', 'javafx.swing', 'javafx.media']
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // SQLite
+    implementation 'org.xerial:sqlite-jdbc:3.46.1.3'
+
+    // Apache PDFBox
+    implementation 'org.apache.pdfbox:pdfbox:3.0.3'
+
+    // Thumbnailator
+    implementation 'net.coobird:thumbnailator:0.4.20'
+
+    // TwelveMonkeys ImageIO
+    implementation 'com.twelvemonkeys.imageio:imageio-core:3.11.0'
+    implementation 'com.twelvemonkeys.imageio:imageio-jpeg:3.11.0'
+    implementation 'com.twelvemonkeys.imageio:imageio-tiff:3.11.0'
+    implementation 'com.twelvemonkeys.imageio:imageio-webp:3.11.0'
+    implementation 'com.twelvemonkeys.imageio:imageio-bmp:3.11.0'
+
+    // VLCJ（オプション依存: GPL v3のため配布物に含めない）
+    // ユーザーがVLCをインストールしている場合のみ動画再生機能が有効化される
+    compileOnly 'uk.co.caprica:vlcj:4.8.3'
+
+    // SLF4J + Logback
+    implementation 'org.slf4j:slf4j-api:2.0.13'
+    implementation 'ch.qos.logback:logback-classic:1.5.8'
+
+    // JUnit 5
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.11.0'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.11.0'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.11.0'
+
+    // Mockito
+    testImplementation 'org.mockito:mockito-core:5.12.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.12.0'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+// ===== 依存JARを libs フォルダにコピー =====
+tasks.register('copyDeps', Copy) {
+    group = 'distribution'
+    description = '依存JARをbuild/jpackage-inputにコピーする'
+    from configurations.runtimeClasspath
+    into layout.buildDirectory.dir('jpackage-input')
+}
+
+tasks.register('copyMainJar', Copy) {
+    group = 'distribution'
+    description = 'メインJARをbuild/jpackage-inputにコピーする'
+    dependsOn jar
+    from layout.buildDirectory.dir('libs')
+    include "${project.name}-${project.version}.jar"
+    into layout.buildDirectory.dir('jpackage-input')
+}
+
+// ===== JavaFX ネイティブDLLをJREに展開 =====
+// Microsoft Build of OpenJDKはJavaFXを含まないため、
+// javafx-*-win.jar からDLLを取り出してJRE/binに追加する
+tasks.register('extractJavaFxNatives') {
+    group = 'distribution'
+    description = 'JavaFX JARからネイティブDLLをbuild/jre-with-fxに展開する'
+    dependsOn copyDeps, copyMainJar
+
+    def javaHome    = System.getProperty('java.home')
+    def jreDestDir  = layout.buildDirectory.dir('jre-with-fx').get().asFile
+    def inputDir_   = layout.buildDirectory.dir('jpackage-input').get().asFile
+
+    inputs.dir(inputDir_)
+    outputs.dir(jreDestDir)
+
+    doLast {
+        // 1. JDKをまるごとコピー
+        copy {
+            from javaHome
+            into jreDestDir
+        }
+        logger.lifecycle("JDKをコピーしました: {} -> {}", javaHome, jreDestDir)
+
+        // 2. javafx-*-win.jar からネイティブDLLを bin/ に展開
+        def binDir = new File(jreDestDir, 'bin')
+        binDir.mkdirs()
+
+        fileTree(inputDir_).matching { include '**/javafx-*-win.jar' }.each { jarFile ->
+            logger.lifecycle("JavaFX DLL展開: {}", jarFile.name)
+            zipTree(jarFile).matching { include '**/*.dll' }.visit { details ->
+                if (!details.isDirectory()) {
+                    def dest = new File(binDir, details.file.name)
+                    if (!dest.exists()) {
+                        details.file.withInputStream { is ->
+                            dest.withOutputStream { os -> os << is }
+                        }
+                    }
+                }
+            }
+        }
+        logger.lifecycle("JavaFX DLLの展開が完了しました: {}", binDir)
+    }
+}
+
+tasks.register('prepareJpackage') {
+    group = 'distribution'
+    description = 'jpackage用の入力ディレクトリを準備する'
+    dependsOn extractJavaFxNatives
+}
+
+// ===== Fat JAR（依存ライブラリを全て含む実行可能JAR） =====
+jar {
+    manifest {
+        attributes(
+            'Main-Class': 'com.example.pixtagarc.MainApp'
+        )
+    }
+}
+
+tasks.register('fatJar', Jar) {
+    group = 'distribution'
+    description = '依存ライブラリを全て含む実行可能JARを作成する'
+    archiveClassifier = 'all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    manifest {
+        attributes(
+            'Main-Class': 'com.example.pixtagarc.MainApp'
+        )
+    }
+
+    from {
+        configurations.runtimeClasspath.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+    with jar
+
+    exclude 'META-INF/*.SF'
+    exclude 'META-INF/*.DSA'
+    exclude 'META-INF/*.RSA'
+}
+
+// ===== jpackage による配布パッケージ作成 =====
+// 使用方法:
+//   macOS (.dmg): ./gradlew jpackageMac
+//   Windows (.msi): ./gradlew jpackageWin
+//   Windows (.exe app-image): ./gradlew jpackageWinExe
+
+def jpackageExe = "${System.getProperty('java.home')}/bin/jpackage"
+def appVersion  = project.version.toString()
+def inputDir    = layout.buildDirectory.dir('jpackage-input').get().asFile.absolutePath
+def outputDir   = layout.buildDirectory.dir('dist').get().asFile.absolutePath
+def mainJar     = "${project.name}-${appVersion}.jar"
+
+// macOS 用: .app + .dmg を生成
+tasks.register('jpackageMac', Exec) {
+    group = 'distribution'
+    description = 'macOS 向け .dmg インストーラーを作成する（macOS 上で実行すること）'
+    dependsOn prepareJpackage
+
+    doFirst { mkdir outputDir }
+
+    commandLine jpackageExe,
+        '--type',            'dmg',
+        '--name',            'pixtagarc',
+        '--app-version',     appVersion,
+        '--vendor',          'com.example',
+        '--description',     '画像・動画ファイル管理アプリ',
+        '--input',           inputDir,
+        '--main-jar',        mainJar,
+        '--main-class',      'com.example.pixtagarc.MainApp',
+        '--dest',            outputDir,
+        '--java-options',    '-Xmx512m',
+        '--java-options',    '-Dfile.encoding=UTF-8',
+        '--mac-package-name','pixtagarc'
+}
+
+// Windows 用: .msi インストーラーを生成（WiX Toolset v3 が必要）
+tasks.register('jpackageWin', Exec) {
+    group = 'distribution'
+    description = 'Windows 向け .msi インストーラーを作成する（WiX Toolset v3 が必要）'
+    dependsOn prepareJpackage
+
+    doFirst { mkdir outputDir }
+
+    commandLine jpackageExe,
+        '--type',         'msi',
+        '--name',         'pixtagarc',
+        '--app-version',  appVersion,
+        '--vendor',       'com.example',
+        '--description',  '画像・動画ファイル管理アプリ',
+        '--input',        inputDir,
+        '--main-jar',     mainJar,
+        '--main-class',   'com.example.pixtagarc.MainApp',
+        '--dest',         outputDir,
+        '--java-options', '-Xmx512m',
+        '--java-options', '-Dfile.encoding=UTF-8',
+        '--win-menu',
+        '--win-shortcut',
+        '--win-dir-chooser'
+}
+
+tasks.register('cleanJpackageDist', Delete) {
+    group = 'distribution'
+    description = 'jpackage出力先の既存ディレクトリを削除する'
+    delete layout.buildDirectory.dir('dist/pixtagarc')
+}
+
+// Windows 用: インストーラー不要のアプリフォルダ（.exe 同梱）
+tasks.register('jpackageWinExe', Exec) {
+    group = 'distribution'
+    description = 'Windows 向け app-image（JRE同梱フォルダ）を作成する'
+    dependsOn prepareJpackage, 'cleanJpackageDist'
+
+    doFirst { mkdir outputDir }
+
+    def jreWithFx = layout.buildDirectory.dir('jre-with-fx').get().asFile.absolutePath
+
+    def args = [
+        jpackageExe,
+        '--type',          'app-image',
+        '--name',          'pixtagarc',
+        '--app-version',   appVersion,
+        '--input',         inputDir,
+        '--main-jar',      mainJar,
+        '--main-class',    'com.example.pixtagarc.MainApp',
+        '--dest',          outputDir,
+        '--runtime-image', jreWithFx,
+        '--java-options',  '-Xmx512m',
+        '--java-options',  '-Dfile.encoding=UTF-8',
+        '--java-options',  '--module-path=$APPDIR',
+        '--java-options',  '--add-modules=javafx.controls,javafx.fxml,javafx.media,javafx.swing'
+    ]
+    commandLine args
+}

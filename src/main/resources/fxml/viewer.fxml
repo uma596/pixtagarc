@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.geometry.Insets?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.example.pixtagarc.controller.ViewerController"
+            styleClass="viewer-root"
+            stylesheets="@../css/app.css">
+
+    <!-- 上部ToolBar -->
+    <top>
+        <VBox>
+            <ToolBar styleClass="viewer-toolbar">
+                <!-- ページ送りボタン -->
+                <Button fx:id="prevButton" text="← 前" onAction="#onPrev" />
+                <Button fx:id="nextButton" text="→ 次" onAction="#onNext" />
+                <Separator orientation="VERTICAL" />
+
+                <!-- ファイル名・ページ番号 -->
+                <Label fx:id="fileNameLabel" text="ファイル名"
+                       style="-fx-text-fill: #bbbbbb; -fx-min-width: 200;" />
+                <Label fx:id="pageIndexLabel" text="(0 / 0)"
+                       style="-fx-text-fill: #aaaaaa;" />
+                <Separator orientation="VERTICAL" />
+
+                <!-- 表示モード切替 -->
+                <ToggleButton fx:id="singlePageToggle" text="単ページ"
+                              selected="true" onAction="#onSinglePageMode" />
+                <ToggleButton fx:id="spreadPageToggle" text="見開き"
+                              onAction="#onSpreadPageMode" />
+                <Separator orientation="VERTICAL" />
+
+                <!-- 綴じ方向 -->
+                <ToggleButton fx:id="rightToLeftToggle" text="← 右綴じ"
+                              selected="true" onAction="#onRightToLeft" />
+                <ToggleButton fx:id="leftToRightToggle" text="左綴じ →"
+                              onAction="#onLeftToRight" />
+                <Separator orientation="VERTICAL" />
+
+                <!-- オフセット調整（見開き時） -->
+                <Label text="オフセット:" style="-fx-text-fill: #aaaaaa;" />
+                <Button fx:id="offsetMinusButton" text="-" onAction="#onOffsetMinus"
+                        minWidth="28" />
+                <Label fx:id="offsetLabel" text="0"
+                       style="-fx-text-fill: #bbbbbb; -fx-min-width: 20; -fx-alignment: center;" />
+                <Button fx:id="offsetPlusButton" text="+" onAction="#onOffsetPlus"
+                        minWidth="28" />
+                <Separator orientation="VERTICAL" />
+
+                <!-- 閉じるボタン -->
+                <Region HBox.hgrow="ALWAYS" />
+                <Button fx:id="closeButton" text="閉じる" onAction="#onClose" />
+            </ToolBar>
+        </VBox>
+    </top>
+
+    <!-- 中央画像表示エリア -->
+    <center>
+        <StackPane fx:id="imageAreaPane" styleClass="viewer-image-area"
+                   style="-fx-background-color: #1e1e1e;">
+            <!-- 単ページ表示 -->
+            <ImageView fx:id="singleImageView"
+                       preserveRatio="true"
+                       smooth="true" />
+
+            <!-- 見開き表示 -->
+            <HBox fx:id="spreadPane" visible="false" alignment="CENTER" spacing="4">
+                <ImageView fx:id="leftImageView"
+                           preserveRatio="true"
+                           smooth="true" />
+                <Separator orientation="VERTICAL"
+                           style="-fx-background-color: #555555;" />
+                <ImageView fx:id="rightImageView"
+                           preserveRatio="true"
+                           smooth="true" />
+            </HBox>
+
+            <!-- 動画再生エリア（VLCJのCanvas埋め込み用） -->
+            <Pane fx:id="videoPane" visible="false"
+                  style="-fx-background-color: #000000;" />
+        </StackPane>
+    </center>
+
+    <!-- 下部情報バー -->
+    <bottom>
+        <VBox styleClass="viewer-info-bar">
+            <!-- タグ行 -->
+            <HBox spacing="6" alignment="CENTER_LEFT">
+                <padding>
+                    <Insets top="4" right="8" bottom="2" left="8" />
+                </padding>
+                <Label text="タグ:" style="-fx-text-fill: #aaaaaa;" />
+                <HBox fx:id="tagChipsPane" spacing="4" alignment="CENTER_LEFT" />
+                <Button fx:id="addTagButton" text="+ タグ追加" onAction="#onAddTag"
+                        style="-fx-font-size: 11px; -fx-padding: 2 6 2 6;" />
+            </HBox>
+
+            <!-- 作者・Star・パス・サイズ行 -->
+            <HBox spacing="12" alignment="CENTER_LEFT">
+                <padding>
+                    <Insets top="2" right="8" bottom="4" left="8" />
+                </padding>
+                <Label text="作者:" style="-fx-text-fill: #aaaaaa;" />
+                <ComboBox fx:id="authorCombo" promptText="作者を選択..."
+                          minWidth="150" onAction="#onAuthorChanged" />
+                <Separator orientation="VERTICAL" />
+                <Label text="Star:" style="-fx-text-fill: #aaaaaa;" />
+                <HBox fx:id="starPane" spacing="2" alignment="CENTER_LEFT" />
+                <Separator orientation="VERTICAL" />
+                <Label text="パス:" style="-fx-text-fill: #aaaaaa;" />
+                <Label fx:id="filePathLabel" text=""
+                       style="-fx-text-fill: #bbbbbb; -fx-max-width: 400;"
+                       textOverrun="ELLIPSIS" />
+                <Separator orientation="VERTICAL" />
+                <Label text="サイズ:" style="-fx-text-fill: #aaaaaa;" />
+                <Label fx:id="resolutionLabel" text=""
+                       style="-fx-text-fill: #bbbbbb;" />
+                <Region HBox.hgrow="ALWAYS" />
+                <ToggleButton fx:id="hiddenToggle" text="🚫 非表示"
+                              onAction="#onToggleHidden" />
+            </HBox>
+        </VBox>
+    </bottom>
+
+</BorderPane>

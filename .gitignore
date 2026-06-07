@@ -1,0 +1,40 @@
+# ビルド成果物
+build/
+.gradle/
+*.class
+*.jar
+*.war
+
+# アプリケーションデータ（DB・サムネイルキャッシュ・ログ）
+db/
+
+# IDE設定
+.idea/
+*.iml
+.vscode/
+.DS_Store
+*.swp
+
+# ログ
+*.log
+logs/
+
+# OS生成ファイル
+Thumbs.db
+ehthumbs.db
+
+# 機密情報・環境依存設定
+*.env
+application-local.properties
+application-local.yml
+
+# Kiro 設定・ドキュメント
+.kiro/
+docs/
+
+# インポートサンプルファイル（テスト用画像・動画）
+sample-import/
+
+# Gradle Wrapper（バイナリは除外）
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties

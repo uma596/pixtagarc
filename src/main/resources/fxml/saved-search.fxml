@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<VBox xmlns="http://javafx.com/javafx/21"
+      xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.example.pixtagarc.controller.SavedSearchController"
+      spacing="12" minWidth="500" minHeight="400"
+      stylesheets="@../css/app.css"
+      style="-fx-background-color: #3c3f41; -fx-padding: 16;">
+
+    <!-- タイトル -->
+    <Label text="保存済み検索の管理"
+           style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #bbbbbb;" />
+
+    <Separator />
+
+    <!-- 保存済み検索一覧 -->
+    <VBox spacing="6" VBox.vgrow="ALWAYS">
+        <Label text="保存済み検索一覧:" style="-fx-text-fill: #aaaaaa;" />
+        <TableView fx:id="savedSearchTableView" VBox.vgrow="ALWAYS" minHeight="250">
+            <columns>
+                <TableColumn fx:id="colName" text="名前" prefWidth="200" />
+                <TableColumn fx:id="colKeyword" text="キーワード" prefWidth="150" />
+                <TableColumn fx:id="colCreatedAt" text="作成日時" prefWidth="130" />
+                <TableColumn fx:id="colUpdatedAt" text="更新日時" prefWidth="130" />
+            </columns>
+        </TableView>
+    </VBox>
+
+    <!-- 操作ボタン -->
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Button fx:id="loadButton" text="選択した検索を適用" onAction="#onLoad"
+                style="-fx-background-color: #4a9eff; -fx-text-fill: #ffffff;" />
+        <Button fx:id="renameButton" text="名前を変更" onAction="#onRename" />
+        <Button fx:id="deleteButton" text="削除" onAction="#onDelete"
+                style="-fx-background-color: #c0392b; -fx-text-fill: #ffffff;" />
+        <Region HBox.hgrow="ALWAYS" />
+        <Button fx:id="closeButton" text="閉じる" onAction="#onClose" />
+    </HBox>
+
+</VBox>

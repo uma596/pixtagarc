@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<VBox xmlns="http://javafx.com/javafx/21"
+      xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.example.pixtagarc.controller.TagEditController"
+      spacing="12" minWidth="350" minHeight="400"
+      stylesheets="@../css/app.css"
+      style="-fx-background-color: #3c3f41; -fx-padding: 16;">
+
+    <!-- タイトル -->
+    <Label text="タグの編集"
+           style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #bbbbbb;" />
+
+    <Separator />
+
+    <!-- 現在のタグ一覧 -->
+    <VBox spacing="6" VBox.vgrow="ALWAYS">
+        <Label text="現在のタグ:" style="-fx-text-fill: #aaaaaa;" />
+        <ListView fx:id="currentTagsListView" VBox.vgrow="ALWAYS" minHeight="200"
+                  style="-fx-background-color: #45494a;" />
+    </VBox>
+
+    <!-- タグ削除ボタン -->
+    <HBox alignment="CENTER_RIGHT">
+        <Button fx:id="removeTagButton" text="選択したタグを削除"
+                onAction="#onRemoveTag"
+                style="-fx-background-color: #c0392b; -fx-text-fill: #ffffff;" />
+    </HBox>
+
+    <Separator />
+
+    <!-- タグ追加 -->
+    <VBox spacing="6">
+        <Label text="タグを追加:" style="-fx-text-fill: #aaaaaa;" />
+        <HBox spacing="8" alignment="CENTER_LEFT">
+            <TextField fx:id="newTagField" promptText="タグ名を入力..."
+                       HBox.hgrow="ALWAYS" onAction="#onAddTag" />
+            <Button fx:id="addTagButton" text="追加" onAction="#onAddTag"
+                    defaultButton="true"
+                    style="-fx-background-color: #4a9eff; -fx-text-fill: #ffffff;" />
+        </HBox>
+        <!-- 既存タグからの選択 -->
+        <Label text="既存タグから選択:" style="-fx-text-fill: #aaaaaa; -fx-font-size: 11px;" />
+        <ComboBox fx:id="existingTagCombo" promptText="既存タグを選択..."
+                  maxWidth="Infinity" onAction="#onSelectExistingTag" />
+    </VBox>
+
+    <Separator />
+
+    <!-- 閉じるボタン -->
+    <HBox alignment="CENTER_RIGHT">
+        <Button fx:id="closeButton" text="閉じる" onAction="#onClose" />
+    </HBox>
+
+</VBox>

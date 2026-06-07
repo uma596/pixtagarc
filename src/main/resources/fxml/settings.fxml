@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<VBox xmlns="http://javafx.com/javafx/21"
+      xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="com.example.pixtagarc.controller.SettingsController"
+      spacing="16" minWidth="400"
+      stylesheets="@../css/app.css"
+      style="-fx-background-color: #3c3f41; -fx-padding: 20;">
+
+    <!-- タイトル -->
+    <Label text="設定"
+           style="-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #bbbbbb;" />
+
+    <Separator />
+
+    <!-- 検索設定 -->
+    <VBox spacing="10">
+        <Label text="検索設定"
+               style="-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #aaaaaa;" />
+
+        <HBox spacing="12" alignment="CENTER_LEFT">
+            <padding><Insets left="8" /></padding>
+            <Label text="検索上限件数:" minWidth="130"
+                   style="-fx-text-fill: #bbbbbb;" />
+            <Spinner fx:id="searchLimitSpinner" minWidth="120" editable="true" />
+            <Label text="件" style="-fx-text-fill: #aaaaaa;" />
+        </HBox>
+
+        <HBox>
+            <padding><Insets left="8" /></padding>
+            <Label fx:id="searchLimitDescLabel" text=""
+                   style="-fx-text-fill: #888888; -fx-font-size: 11px;" />
+        </HBox>
+
+        <HBox>
+            <padding><Insets left="8" /></padding>
+            <Label text="※ 設定変更は次回の検索から反映されます"
+                   style="-fx-text-fill: #666666; -fx-font-size: 11px;" />
+        </HBox>
+    </VBox>
+
+    <Separator />
+
+    <!-- ボタン行 -->
+    <HBox alignment="CENTER_RIGHT">
+        <Button fx:id="closeButton" text="閉じる" onAction="#onClose"
+                defaultButton="true" />
+    </HBox>
+
+</VBox>

@@ -1,0 +1,444 @@
+/* pixtagarc - ダークテーマ基本スタイル */
+
+/* ===== ルート変数 ===== */
+.root {
+    -fx-base: #2b2b2b;
+    -fx-background: #3c3f41;
+    -fx-control-inner-background: #45494a;
+    -fx-control-inner-background-alt: #3c3f41;
+    -fx-accent: #4a9eff;
+    -fx-focus-color: #4a9eff;
+    -fx-faint-focus-color: #4a9eff22;
+    -fx-text-fill: #bbbbbb;
+    -fx-text-base-color: #bbbbbb;
+    -fx-text-background-color: #bbbbbb;
+    -fx-font-family: "Helvetica Neue", "Hiragino Sans", "Yu Gothic", sans-serif;
+    -fx-font-size: 13px;
+}
+
+/* ===== ToolBar ===== */
+.tool-bar {
+    -fx-background-color: #3c3f41;
+    -fx-border-color: #555555;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 4 8 4 8;
+    -fx-spacing: 4;
+}
+
+.tool-bar .button {
+    -fx-background-color: #4c5052;
+    -fx-text-fill: #bbbbbb;
+    -fx-border-color: #666666;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-padding: 4 10 4 10;
+    -fx-cursor: hand;
+}
+
+.tool-bar .button:hover {
+    -fx-background-color: #5c6062;
+}
+
+.tool-bar .button:pressed {
+    -fx-background-color: #3a3d3f;
+}
+
+.tool-bar .toggle-button {
+    -fx-background-color: #4c5052;
+    -fx-text-fill: #bbbbbb;
+    -fx-border-color: #666666;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-padding: 4 10 4 10;
+    -fx-cursor: hand;
+}
+
+.tool-bar .toggle-button:selected {
+    -fx-background-color: #4a9eff;
+    -fx-text-fill: #ffffff;
+}
+
+/* ===== 検索バー ===== */
+.search-bar {
+    -fx-background-color: #3c3f41;
+    -fx-border-color: #555555;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 6 8 6 8;
+    -fx-spacing: 6;
+}
+
+.search-field {
+    -fx-background-color: #45494a;
+    -fx-text-fill: #bbbbbb;
+    -fx-border-color: #666666;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-padding: 4 8 4 8;
+    -fx-prompt-text-fill: #777777;
+    -fx-min-width: 200;
+}
+
+.search-field:focused {
+    -fx-border-color: #4a9eff;
+}
+
+/* ===== ComboBox ===== */
+.combo-box {
+    -fx-background-color: #45494a;
+    -fx-text-fill: #bbbbbb;
+    -fx-border-color: #666666;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+}
+
+.combo-box .list-cell {
+    -fx-background-color: #45494a;
+    -fx-text-fill: #bbbbbb;
+}
+
+.combo-box-popup .list-view {
+    -fx-background-color: #3c3f41;
+    -fx-border-color: #666666;
+}
+
+.combo-box-popup .list-cell:hover {
+    -fx-background-color: #4a9eff;
+    -fx-text-fill: #ffffff;
+}
+
+/* ===== TreeView（タグツリー） ===== */
+.tree-view {
+    -fx-background-color: #313335;
+    -fx-border-color: #555555;
+    -fx-border-width: 0 1 0 0;
+}
+
+.tree-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #bbbbbb;
+    -fx-padding: 3 6 3 6;
+}
+
+.tree-cell:selected {
+    -fx-background-color: #4a9eff;
+    -fx-text-fill: #ffffff;
+}
+
+.tree-cell:hover {
+    -fx-background-color: #4c5052;
+}
+
+/* ===== TableView（リスト表示） ===== */
+.table-view {
+    -fx-background-color: #3c3f41;
+    -fx-border-color: #555555;
+}
+
+.table-view .column-header {
+    -fx-background-color: #313335;
+    -fx-text-fill: #bbbbbb;
+    -fx-border-color: #555555;
+    -fx-border-width: 0 1 1 0;
+    -fx-padding: 4 8 4 8;
+}
+
+.table-view .column-header:hover {
+    -fx-background-color: #3c3f41;
+}
+
+.table-row-cell {
+    -fx-background-color: #3c3f41;
+    -fx-text-fill: #bbbbbb;
+    -fx-border-color: #4a4a4a;
+    -fx-border-width: 0 0 1 0;
+}
+
+.table-row-cell:odd {
+    -fx-background-color: #404244;
+}
+
+.table-row-cell:selected {
+    -fx-background-color: #4a9eff;
+    -fx-text-fill: #ffffff;
+}
+
+.table-row-cell:hover {
+    -fx-background-color: #4c5052;
+}
+
+/* ===== サムネイルグリッド ===== */
+.thumbnail-grid {
+    -fx-background-color: #3c3f41;
+    -fx-padding: 8;
+    -fx-hgap: 8;
+    -fx-vgap: 8;
+}
+
+.thumbnail-cell {
+    -fx-background-color: #45494a;
+    -fx-border-color: #666666;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 4;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 4, 0, 0, 2);
+}
+
+.thumbnail-cell:hover {
+    -fx-border-color: #4a9eff;
+    -fx-effect: dropshadow(gaussian, rgba(74,158,255,0.5), 6, 0, 0, 2);
+}
+
+.thumbnail-cell:selected,
+.thumbnail-cell.selected {
+    -fx-border-color: #4a9eff;
+    -fx-background-color: #2a4a6a;
+}
+
+.thumbnail-label {
+    -fx-text-fill: #aaaaaa;
+    -fx-font-size: 11px;
+    -fx-max-width: 120;
+    -fx-text-overrun: ellipsis;
+}
+
+/* 非表示アイコンオーバーレイ */
+.hidden-overlay {
+    -fx-background-color: rgba(0, 0, 0, 0.5);
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+}
+
+/* ===== ステータスバー ===== */
+.status-bar {
+    -fx-background-color: #313335;
+    -fx-border-color: #555555;
+    -fx-border-width: 1 0 0 0;
+    -fx-padding: 4 8 4 8;
+}
+
+.status-bar .label {
+    -fx-text-fill: #aaaaaa;
+    -fx-font-size: 12px;
+}
+
+/* ===== ビューア画面 ===== */
+.viewer-root {
+    -fx-background-color: #1e1e1e;
+}
+
+.viewer-toolbar {
+    -fx-background-color: #2b2b2b;
+    -fx-border-color: #555555;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 4 8 4 8;
+    -fx-spacing: 4;
+}
+
+.viewer-image-area {
+    -fx-background-color: #1e1e1e;
+    -fx-alignment: center;
+}
+
+.viewer-info-bar {
+    -fx-background-color: #2b2b2b;
+    -fx-border-color: #555555;
+    -fx-border-width: 1 0 0 0;
+    -fx-padding: 6 8 6 8;
+    -fx-spacing: 8;
+}
+
+.viewer-info-bar .label {
+    -fx-text-fill: #aaaaaa;
+    -fx-font-size: 12px;
+}
+
+/* ===== タグチップ ===== */
+.tag-chip {
+    -fx-background-color: #4c5052;
+    -fx-text-fill: #bbbbbb;
+    -fx-border-color: #666666;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 2 8 2 8;
+    -fx-font-size: 11px;
+    -fx-cursor: hand;
+}
+
+.tag-chip:hover {
+    -fx-background-color: #4a9eff;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #4a9eff;
+}
+
+/* ===== ダイアログ ===== */
+.dialog-pane {
+    -fx-background-color: #3c3f41;
+}
+
+.dialog-pane .header-panel {
+    -fx-background-color: #313335;
+}
+
+.dialog-pane .header-panel .label {
+    -fx-text-fill: #bbbbbb;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.dialog-pane .content {
+    -fx-background-color: #3c3f41;
+    -fx-text-fill: #bbbbbb;
+}
+
+.dialog-pane .button-bar .button {
+    -fx-background-color: #4c5052;
+    -fx-text-fill: #bbbbbb;
+    -fx-border-color: #666666;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-padding: 4 16 4 16;
+    -fx-cursor: hand;
+}
+
+.dialog-pane .button-bar .button:hover {
+    -fx-background-color: #5c6062;
+}
+
+.dialog-pane .button-bar .button:default {
+    -fx-background-color: #4a9eff;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #3a8eef;
+}
+
+/* ===== ProgressBar ===== */
+.progress-bar {
+    -fx-background-color: #45494a;
+    -fx-border-color: #666666;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+}
+
+.progress-bar .bar {
+    -fx-background-color: #4a9eff;
+    -fx-background-radius: 3;
+}
+
+.progress-bar .track {
+    -fx-background-color: #45494a;
+    -fx-background-radius: 3;
+}
+
+/* ===== ScrollBar ===== */
+.scroll-bar {
+    -fx-background-color: #3c3f41;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: #666666;
+    -fx-background-radius: 3;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: #888888;
+}
+
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-background-color: #3c3f41;
+}
+
+/* ===== TextField / TextArea ===== */
+.text-field,
+.text-area {
+    -fx-background-color: #45494a;
+    -fx-text-fill: #bbbbbb;
+    -fx-border-color: #666666;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-padding: 4 8 4 8;
+    -fx-prompt-text-fill: #777777;
+}
+
+.text-field:focused,
+.text-area:focused {
+    -fx-border-color: #4a9eff;
+}
+
+/* ===== ListView ===== */
+.list-view {
+    -fx-background-color: #3c3f41;
+    -fx-border-color: #555555;
+}
+
+.list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: #bbbbbb;
+    -fx-padding: 4 8 4 8;
+}
+
+.list-cell:selected {
+    -fx-background-color: #4a9eff;
+    -fx-text-fill: #ffffff;
+}
+
+.list-cell:hover {
+    -fx-background-color: #4c5052;
+}
+
+/* ===== Separator ===== */
+.separator .line {
+    -fx-border-color: #555555;
+    -fx-border-width: 1;
+}
+
+/* ===== Label ===== */
+.label {
+    -fx-text-fill: #bbbbbb;
+}
+
+/* ===== CheckBox ===== */
+.check-box {
+    -fx-text-fill: #bbbbbb;
+}
+
+.check-box .box {
+    -fx-background-color: #45494a;
+    -fx-border-color: #666666;
+    -fx-border-radius: 2;
+    -fx-background-radius: 2;
+}
+
+.check-box:selected .box {
+    -fx-background-color: #4a9eff;
+    -fx-border-color: #4a9eff;
+}
+
+.check-box:selected .mark {
+    -fx-background-color: #ffffff;
+}
+
+/* ===== Spinner ===== */
+.spinner {
+    -fx-background-color: #45494a;
+    -fx-border-color: #666666;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+}
+
+.spinner .text-field {
+    -fx-background-color: #45494a;
+    -fx-text-fill: #bbbbbb;
+    -fx-border-color: transparent;
+}
+
+.spinner .increment-arrow-button,
+.spinner .decrement-arrow-button {
+    -fx-background-color: #4c5052;
+    -fx-border-color: #666666;
+}
+
+.spinner .increment-arrow-button:hover,
+.spinner .decrement-arrow-button:hover {
+    -fx-background-color: #5c6062;
+}

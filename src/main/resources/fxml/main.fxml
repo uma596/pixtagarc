@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21"
+            xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="com.example.pixtagarc.controller.MainController"
+            stylesheets="@../css/app.css">
+
+    <!-- 上部ToolBar -->
+    <top>
+        <VBox>
+            <!-- メインツールバー -->
+            <ToolBar styleClass="tool-bar">
+                <Button fx:id="importButton" text="インポート" onAction="#onImport" />
+                <Button fx:id="pdfExportButton" text="PDF出力" onAction="#onPdfExport" />
+                <Separator orientation="VERTICAL" />
+                <ToggleButton fx:id="thumbnailViewButton" text="🔲 サムネイル"
+                              onAction="#onSwitchToThumbnail" selected="true" />
+                <ToggleButton fx:id="listViewButton" text="☰ リスト"
+                              onAction="#onSwitchToList" />
+                <Separator orientation="VERTICAL" />
+                <Label text="サイズ:" />
+                <ComboBox fx:id="thumbnailSizeCombo" onAction="#onThumbnailSizeChanged" />
+                <Separator orientation="VERTICAL" />
+                <Button fx:id="savedSearchManageButton" text="保存済み検索の管理"
+                        onAction="#onManageSavedSearches" />
+                <Region HBox.hgrow="ALWAYS" />
+                <Button text="⚙ 設定" onAction="#onSettings" />
+            </ToolBar>
+
+            <!-- 検索バー -->
+            <HBox styleClass="search-bar" alignment="CENTER_LEFT" spacing="6">
+                <padding>
+                    <Insets top="6" right="8" bottom="6" left="8" />
+                </padding>
+                <TextField fx:id="keywordField" styleClass="search-field"
+                           promptText="キーワードを入力..." minWidth="200"
+                           onAction="#onSearch" />
+                <ComboBox fx:id="tagFilterCombo" promptText="タグ▼" minWidth="120"
+                          onAction="#onTagFilterChanged" />
+                <ComboBox fx:id="authorFilterCombo" promptText="作者▼" minWidth="120"
+                          onAction="#onAuthorFilterChanged" />
+                <ToggleButton fx:id="excludeHiddenToggle" text="🚫 非表示除外"
+                              selected="true" onAction="#onExcludeHiddenChanged" />
+                <ComboBox fx:id="starFilterCombo" promptText="☆ Star" minWidth="100"
+                          onAction="#onStarFilterChanged" />
+                <Button fx:id="searchButton" text="検索" onAction="#onSearch"
+                        defaultButton="true" />
+                <Button fx:id="saveSearchButton" text="💾 保存" onAction="#onSaveSearch" />
+                <Separator orientation="VERTICAL" />
+                <Label text="保存済み:" />
+                <ComboBox fx:id="savedSearchCombo" promptText="保存済み検索を選択..."
+                          minWidth="180" onAction="#onLoadSavedSearch" />
+            </HBox>
+        </VBox>
+    </top>
+
+    <!-- 左側タグツリー -->
+    <left>
+        <VBox minWidth="180" maxWidth="250" prefWidth="200"
+              style="-fx-background-color: #313335; -fx-border-color: #555555; -fx-border-width: 0 1 0 0;">
+            <Label text="タグ" style="-fx-font-weight: bold; -fx-padding: 8 8 4 8; -fx-text-fill: #aaaaaa;" />
+            <TreeView fx:id="tagTreeView" VBox.vgrow="ALWAYS"
+                      onMouseClicked="#onTagTreeClicked"
+                      style="-fx-background-color: #313335;" />
+        </VBox>
+    </left>
+
+    <!-- 中央コンテンツエリア -->
+    <center>
+        <StackPane fx:id="contentPane">
+            <!-- サムネイルグリッド（ScrollPane内） -->
+            <ScrollPane fx:id="thumbnailScrollPane" fitToWidth="true"
+                        style="-fx-background-color: #3c3f41;">
+                <FlowPane fx:id="thumbnailPane" styleClass="thumbnail-grid"
+                          hgap="8" vgap="8" prefWrapLength="800" />
+            </ScrollPane>
+
+            <!-- リスト表示（TableView） -->
+            <TableView fx:id="imageTableView" visible="false">
+                <columns>
+                    <TableColumn fx:id="colFileName" text="ファイル名" prefWidth="250" />
+                    <TableColumn fx:id="colAuthor" text="作者" prefWidth="120" />
+                    <TableColumn fx:id="colStar" text="Star" prefWidth="80" />
+                    <TableColumn fx:id="colTags" text="タグ" prefWidth="200" />
+                    <TableColumn fx:id="colCreatedAt" text="作成日時" prefWidth="150" />
+                    <TableColumn fx:id="colFileSize" text="サイズ" prefWidth="80" />
+                    <TableColumn fx:id="colResolution" text="解像度" prefWidth="100" />
+                </columns>
+            </TableView>
+        </StackPane>
+    </center>
+
+    <!-- 下部ステータスバー -->
+    <bottom>
+        <HBox styleClass="status-bar" alignment="CENTER_LEFT" spacing="16">
+            <padding>
+                <Insets top="4" right="8" bottom="4" left="8" />
+            </padding>
+            <Label fx:id="totalCountLabel" text="件数: 0 件" />
+            <Label fx:id="displayRangeLabel" text="表示: 0 件" />
+            <Region HBox.hgrow="ALWAYS" />
+            <Label fx:id="statusMessageLabel" text="" />
+        </HBox>
+    </bottom>
+
+</BorderPane>
