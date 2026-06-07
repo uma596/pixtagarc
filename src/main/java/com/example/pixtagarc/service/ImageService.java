@@ -101,4 +101,65 @@ public class ImageService {
     public Optional<Image> findByFilePath(String filePath) {
         return imageRepository.findByFilePath(filePath);
     }
+
+    /**
+     * 指定された画像のタグを同一作品の全画像に反映する。
+     *
+     * @param imageId    反映元の画像ID
+     * @param tagService タグサービス（タグ一覧取得用）
+     * @param imageTagRepository 画像-タグ中間テーブルリポジトリ
+     * @return 反映先の画像件数
+     */
+    public int applyTagsToWork(Long imageId,
+                               com.example.pixtagarc.repository.ImageTagRepository imageTagRepository) {
+        Image image = findById(imageId);
+        if (image.getWorkId() == null) return 0;
+
+        java.util.List<Image> workImages = imageRepository.findByWorkId(image.getWorkId());
+        java.util.List<com.example.pixtagarc.domain.Tag> tags = imageTagRepository.findTagsByImageId(imageId);
+
+        for (Image img : workImages) {
+            for (com.example.pixtagarc.domain.Tag tag : tags) {
+                imageTagRepository.addTag(img.getId(), tag.getId());
+            }
+            // FTS5更新
+            String tagsText = imageTagRepository.getTagsTextForImage(img.getId());
+            imageRepository.insertFts(img.getId(), img.getFileName(), tagsText, "");
+        }
+        log.info("タグを作品全体に反映しました: imageId={}, workId={}, count={}",
+                imageId, image.getWorkId(), workImages.size());
+        return workImages.size();
+    }
+
+    /**
+     * 指定された画像のStar評価を同一作品の全画像に反映する。
+     *
+     * @param imageId 反映元の画像ID
+     * @return 反映先の画像件数
+     */
+    public int applyStarToWork(Long imageId) {
+        Image image = findById(imageId);
+        if (image.getWorkId() == null) return 0;
+
+        java.util.List<Image> workImages = imageRepository.findByWorkId(image.getWorkId());
+        for (Image img : workImages) {
+            imageRepository.updateStar(img.getId(), image.getStar());
+        }
+        log.info("Starを作品全体に反映しました: imageId={}, workId={}, star={}, count={}",
+                imageId, image.getWorkId(), image.getStar(), workImages.size());
+        return workImages.size();
+    }
+
+    /**
+     * 指定された作品の全画像の非表示フラグを一括更新する。
+     *
+     * @param workId   作品ID
+     * @param isHidden 非表示フラグ
+     * @return 更新された画像件数
+     */
+    public int toggleHiddenForWork(Long workId, boolean isHidden) {
+        int count = imageRepository.updateHiddenByWorkId(workId, isHidden);
+        log.info("作品全体の非表示を更新しました: workId={}, isHidden={}, count={}", workId, isHidden, count);
+        return count;
+    }
 }

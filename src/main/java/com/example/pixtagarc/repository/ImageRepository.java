@@ -293,6 +293,28 @@ public class ImageRepository {
     }
 
     /**
+     * 指定された作品の全画像の非表示フラグを一括更新する。
+     *
+     * @param workId   作品ID
+     * @param isHidden 非表示フラグ
+     * @return 更新された行数
+     * @throws RuntimeException データベース操作に失敗した場合
+     */
+    public int updateHiddenByWorkId(Long workId, boolean isHidden) {
+        String sql = "UPDATE images SET is_hidden = ? WHERE work_id = ?";
+        try (PreparedStatement ps = dbConfig.getConnection().prepareStatement(sql)) {
+            ps.setInt(1, isHidden ? 1 : 0);
+            ps.setLong(2, workId);
+            int count = ps.executeUpdate();
+            log.debug("作品全体の非表示を更新しました: workId={}, isHidden={}, count={}", workId, isHidden, count);
+            return count;
+        } catch (SQLException e) {
+            log.error("作品全体の非表示更新に失敗しました: workId={}", workId, e);
+            throw new RuntimeException("作品全体の非表示更新に失敗しました", e);
+        }
+    }
+
+    /**
      * 指定されたIDの画像を返す。
      *
      * @param id 検索する画像ID

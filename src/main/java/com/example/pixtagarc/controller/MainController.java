@@ -37,6 +37,7 @@ import java.util.ResourceBundle;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 /**
  * メイン画面のコントローラークラス。
@@ -76,8 +77,14 @@ public class MainController implements Initializable {
     /** キーワード入力フィールド。 */
     @FXML private TextField keywordField;
 
-    /** タグフィルターComboBox。 */
-    @FXML private ComboBox<String> tagFilterCombo;
+    /** タグフィルターMenuButton。 */
+    @FXML private MenuButton tagFilterButton;
+
+    /** キーワードクリアボタン。 */
+    @FXML private Button clearKeywordButton;
+
+    /** メインSplitPane。 */
+    @FXML private SplitPane mainSplitPane;
 
     /** 作者フィルターComboBox。 */
     @FXML private ComboBox<String> authorFilterCombo;
@@ -294,6 +301,10 @@ public class MainController implements Initializable {
         tagTreeView.setRoot(root);
         tagTreeView.setShowRoot(false);
 
+        // キーワード×クリアボタンの表示制御
+        keywordField.textProperty().addListener((obs, oldVal, newVal) ->
+                clearKeywordButton.setVisible(newVal != null && !newVal.isEmpty()));
+
         // コンテキストメニューの設定
         setupContextMenu();
     }
@@ -374,13 +385,61 @@ public class MainController implements Initializable {
         MenuItem deleteImage = new MenuItem("画像をDBから削除...");
         deleteImage.setOnAction(e -> onDeleteImageFromMain());
 
+        // 作品単位操作
+        MenuItem applyTagsToWork = new MenuItem("タグを作品全体に反映");
+        applyTagsToWork.setOnAction(e -> {
+            ImageSummary selected = getSelectedImage();
+            if (selected != null && selected.getWorkId() != null) {
+                try {
+                    DatabaseConfig dbConfig = DatabaseConfig.getInstance();
+                    ImageTagRepository itr = new ImageTagRepository(dbConfig);
+                    int count = imageService.applyTagsToWork(selected.getId(), itr);
+                    statusMessageLabel.setText(count + "件の画像にタグを反映しました");
+                } catch (Exception ex) {
+                    log.error("タグの作品反映に失敗しました", ex);
+                }
+            }
+        });
+
+        MenuItem applyStarToWork = new MenuItem("Starを作品全体に反映");
+        applyStarToWork.setOnAction(e -> {
+            ImageSummary selected = getSelectedImage();
+            if (selected != null && selected.getWorkId() != null) {
+                try {
+                    int count = imageService.applyStarToWork(selected.getId());
+                    statusMessageLabel.setText(count + "件の画像にStar ★" + selected.getStar() + " を反映しました");
+                } catch (Exception ex) {
+                    log.error("Starの作品反映に失敗しました", ex);
+                }
+            }
+        });
+
+        MenuItem toggleHiddenWork = new MenuItem("作品全体を非表示にする");
+        toggleHiddenWork.setOnAction(e -> {
+            ImageSummary selected = getSelectedImage();
+            if (selected != null && selected.getWorkId() != null) {
+                try {
+                    boolean newState = !selected.isHidden();
+                    int count = imageService.toggleHiddenForWork(selected.getWorkId(), newState);
+                    statusMessageLabel.setText(count + "件の画像を" + (newState ? "非表示に" : "非表示解除") + "しました");
+                    if (excludeHiddenToggle.isSelected()) onSearch();
+                } catch (Exception ex) {
+                    log.error("作品全体の非表示切替に失敗しました", ex);
+                }
+            }
+        });
+
         contextMenu.getItems().addAll(
                 openViewer,
                 openWork,
                 new SeparatorMenuItem(),
                 editTags,
                 toggleHidden,
+                toggleHiddenWork,
                 starMenu,
+                new SeparatorMenuItem(),
+                applyTagsToWork,
+                applyStarToWork,
                 new SeparatorMenuItem(),
                 copyPath,
                 openInExplorer,
@@ -396,9 +455,16 @@ public class MainController implements Initializable {
             ImageSummary selected = getSelectedImage();
             if (selected != null) {
                 toggleHidden.setText(selected.isHidden() ? "非表示を解除" : "非表示にする");
+                toggleHiddenWork.setText(selected.isHidden() ? "作品全体の非表示を解除" : "作品全体を非表示にする");
                 openWork.setDisable(selected.getWorkId() == null);
+                toggleHiddenWork.setDisable(selected.getWorkId() == null);
+                applyTagsToWork.setDisable(selected.getWorkId() == null);
+                applyStarToWork.setDisable(selected.getWorkId() == null);
             } else {
                 openWork.setDisable(true);
+                toggleHiddenWork.setDisable(true);
+                applyTagsToWork.setDisable(true);
+                applyStarToWork.setDisable(true);
             }
         });
 
@@ -631,19 +697,68 @@ public class MainController implements Initializable {
     }
 
     /**
-     * タグフィルターComboBoxを読み込む。
+     * タグフィルターMenuButtonを読み込む。
      */
     private void loadTagFilter() {
         try {
+            tagFilterButton.getItems().clear();
             List<Tag> tags = tagService.findAll();
-            List<String> items = new ArrayList<>();
-            items.add("すべてのタグ");
-            tags.forEach(t -> items.add(t.getName()));
-            tagFilterCombo.setItems(FXCollections.observableArrayList(items));
-            tagFilterCombo.setValue("すべてのタグ");
+
+            // 「すべて（解除）」項目
+            MenuItem allItem = new MenuItem("すべて（解除）");
+            allItem.setOnAction(e -> {
+                tagFilterButton.getItems().stream()
+                        .filter(mi -> mi instanceof CheckMenuItem)
+                        .map(mi -> (CheckMenuItem) mi)
+                        .forEach(ci -> ci.setSelected(false));
+                updateTagFilterLabel();
+                onSearch();
+            });
+            tagFilterButton.getItems().add(allItem);
+            tagFilterButton.getItems().add(new SeparatorMenuItem());
+
+            // 各タグ（Star降順）
+            for (Tag tag : tags) {
+                String label = (tag.getStar() > 0 ? "★".repeat(tag.getStar()) + " " : "") + tag.getName();
+                CheckMenuItem item = new CheckMenuItem(label);
+                item.setUserData(tag.getId());
+                item.setOnAction(e -> {
+                    updateTagFilterLabel();
+                    onSearch();
+                    // メニューを閉じさせない: 再表示
+                    Platform.runLater(() -> tagFilterButton.show());
+                });
+                tagFilterButton.getItems().add(item);
+            }
         } catch (Exception e) {
             log.error("タグフィルターの読み込みに失敗しました", e);
         }
+    }
+
+    /**
+     * タグフィルターMenuButtonのラベルを選択状態に応じて更新する。
+     */
+    private void updateTagFilterLabel() {
+        long count = tagFilterButton.getItems().stream()
+                .filter(mi -> mi instanceof CheckMenuItem && mi.getUserData() != null)
+                .map(mi -> (CheckMenuItem) mi)
+                .filter(CheckMenuItem::isSelected)
+                .count();
+        tagFilterButton.setText(count == 0 ? "すべてのタグ" : count + "タグ選択中");
+    }
+
+    /**
+     * 選択中のタグIDリストを返す。
+     *
+     * @return 選択中のタグIDリスト（未選択の場合は空リスト）
+     */
+    private List<Long> getSelectedTagIds() {
+        return tagFilterButton.getItems().stream()
+                .filter(mi -> mi instanceof CheckMenuItem && mi.getUserData() != null)
+                .map(mi -> (CheckMenuItem) mi)
+                .filter(CheckMenuItem::isSelected)
+                .map(ci -> (Long) ci.getUserData())
+                .collect(Collectors.toList());
     }
 
     /**
@@ -691,11 +806,10 @@ public class MainController implements Initializable {
         condition.setPage(currentPage);
         condition.setPageSize(getPageSize());
 
-        // タグフィルター: 選択中のタグ名からIDを解決
-        String selectedTag = tagFilterCombo.getValue();
-        if (selectedTag != null && !"すべてのタグ".equals(selectedTag)) {
-            tagService.findByName(selectedTag).ifPresent(tag ->
-                    condition.setTagIds(List.of(tag.getId())));
+        // タグフィルター: 選択中のタグIDリスト（複数選択OR検索）
+        List<Long> tagIds = getSelectedTagIds();
+        if (!tagIds.isEmpty()) {
+            condition.setTagIds(tagIds);
         }
 
         // 作者フィルター: 選択中の作者名からIDを解決
@@ -908,11 +1022,40 @@ public class MainController implements Initializable {
     }
 
     /**
-     * タグフィルターが変更された際の処理。
+     * タグフィルターが変更された際の処理（MenuButton版では各CheckMenuItemが直接onSearchを呼ぶため未使用）。
      */
     @FXML
     private void onTagFilterChanged() {
         onSearch();
+    }
+
+    /**
+     * キーワードフィールドの×ボタンが押された際の処理。
+     */
+    @FXML
+    private void onClearKeyword() {
+        keywordField.clear();
+        onSearch();
+    }
+
+    /**
+     * 検索条件クリアボタンが押された際の処理。
+     * 全フィルターをデフォルト値にリセットして再検索する。
+     */
+    @FXML
+    private void onClearSearch() {
+        keywordField.clear();
+        // タグフィルター: 全チェックOFF
+        tagFilterButton.getItems().stream()
+                .filter(mi -> mi instanceof CheckMenuItem)
+                .map(mi -> (CheckMenuItem) mi)
+                .forEach(ci -> ci.setSelected(false));
+        updateTagFilterLabel();
+        authorFilterCombo.setValue("すべての作者");
+        starFilterCombo.setValue("すべて");
+        excludeHiddenToggle.setSelected(true);
+        onSearch();
+        statusMessageLabel.setText("検索条件をクリアしました");
     }
 
     /**
@@ -1014,6 +1157,10 @@ public class MainController implements Initializable {
         AppConfig config = AppConfig.getInstance();
         java.util.Map<String, String> states = new java.util.LinkedHashMap<>();
         states.put(AppConfig.KEY_STATE_KEYWORD, keywordField.getText());
+        // タグフィルター: 選択中のIDをカンマ区切りで保存
+        List<Long> tagIds = getSelectedTagIds();
+        states.put(AppConfig.KEY_STATE_TAG_IDS,
+                tagIds.stream().map(String::valueOf).collect(Collectors.joining(",")));
         states.put(AppConfig.KEY_STATE_AUTHOR_FILTER,
                 authorFilterCombo.getValue() != null ? authorFilterCombo.getValue() : "すべての作者");
         states.put(AppConfig.KEY_STATE_STAR_FILTER,
@@ -1025,6 +1172,11 @@ public class MainController implements Initializable {
         states.put(AppConfig.KEY_STATE_DISPLAY_MODE, viewState.getDisplayMode().name());
         states.put(AppConfig.KEY_STATE_THUMBNAIL_SIZE,
                 thumbnailSizeCombo.getValue() != null ? thumbnailSizeCombo.getValue() : "中");
+        // SplitPane デバイダー位置
+        if (mainSplitPane.getDividers().size() > 0) {
+            states.put("state.split_divider",
+                    String.valueOf(mainSplitPane.getDividerPositions()[0]));
+        }
         config.setStates(states);
     }
 
@@ -1038,6 +1190,20 @@ public class MainController implements Initializable {
         try {
             String keyword = config.getState(AppConfig.KEY_STATE_KEYWORD, "");
             keywordField.setText(keyword);
+
+            // タグフィルター復元: 保存されたIDリストでCheckMenuItemを選択
+            String tagIdsStr = config.getState(AppConfig.KEY_STATE_TAG_IDS, "");
+            if (!tagIdsStr.isEmpty()) {
+                List<Long> savedTagIds = java.util.Arrays.stream(tagIdsStr.split(","))
+                        .filter(s -> !s.isEmpty())
+                        .map(Long::parseLong)
+                        .collect(Collectors.toList());
+                tagFilterButton.getItems().stream()
+                        .filter(mi -> mi instanceof CheckMenuItem && mi.getUserData() != null)
+                        .map(mi -> (CheckMenuItem) mi)
+                        .forEach(ci -> ci.setSelected(savedTagIds.contains((Long) ci.getUserData())));
+                updateTagFilterLabel();
+            }
 
             String authorFilter = config.getState(AppConfig.KEY_STATE_AUTHOR_FILTER, "すべての作者");
             if (authorFilterCombo.getItems().contains(authorFilter)) {
@@ -1068,6 +1234,14 @@ public class MainController implements Initializable {
 
             String thumbSize = config.getState(AppConfig.KEY_STATE_THUMBNAIL_SIZE, "中");
             thumbnailSizeCombo.setValue(thumbSize);
+
+            // SplitPane デバイダー位置復元
+            String dividerStr = config.getState("state.split_divider", "0.15");
+            try {
+                double divider = Double.parseDouble(dividerStr);
+                mainSplitPane.setDividerPositions(divider);
+            } catch (NumberFormatException ignored) {
+            }
 
             log.info("アプリ状態を復元しました: keyword={}, page={}", keyword, currentPage);
         } catch (Exception e) {

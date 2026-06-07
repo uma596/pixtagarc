@@ -153,6 +153,7 @@ public class TagEditController implements Initializable {
             if (!alreadyExists) {
                 tagService.addTagToImage(imageId, tag.getId());
                 loadCurrentTags();
+                updateFtsIndex();
                 log.info("タグを追加しました: imageId={}, tagName={}", imageId, tagName);
             }
         } catch (Exception e) {
@@ -174,10 +175,41 @@ public class TagEditController implements Initializable {
         try {
             tagService.removeTagFromImage(imageId, tagToRemove.getId());
             loadCurrentTags();
+            updateFtsIndex();
             log.info("タグを削除しました: imageId={}, tagId={}", imageId, tagToRemove.getId());
         } catch (Exception e) {
             log.error("タグの削除に失敗しました: tagId={}", tagToRemove.getId(), e);
             showError("タグの削除に失敗しました", e.getMessage());
+        }
+    }
+
+    /**
+     * 画像のFTS5インデックスを再構築する。
+     *
+     * <p>タグ追加・削除後にキーワード検索でタグ名がヒットするようにFTS5を更新する。
+     */
+    private void updateFtsIndex() {
+        try {
+            DatabaseConfig dbConfig = DatabaseConfig.getInstance();
+            com.example.pixtagarc.repository.ImageRepository imageRepository =
+                    new com.example.pixtagarc.repository.ImageRepository(dbConfig);
+            com.example.pixtagarc.repository.ImageTagRepository imageTagRepository =
+                    new com.example.pixtagarc.repository.ImageTagRepository(dbConfig);
+
+            com.example.pixtagarc.domain.Image image = imageRepository.findById(imageId).orElse(null);
+            if (image == null) return;
+
+            String tagsText = imageTagRepository.getTagsTextForImage(imageId);
+            String authorName = "";
+            if (image.getAuthorId() != null) {
+                com.example.pixtagarc.repository.AuthorRepository authorRepo =
+                        new com.example.pixtagarc.repository.AuthorRepository(dbConfig);
+                authorName = authorRepo.findById(image.getAuthorId())
+                        .map(a -> a.getName()).orElse("");
+            }
+            imageRepository.insertFts(imageId, image.getFileName(), tagsText, authorName);
+        } catch (Exception e) {
+            log.warn("FTS5インデックスの更新に失敗しました（キーワード検索に影響する可能性）: imageId={}", imageId, e);
         }
     }
 

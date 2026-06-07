@@ -36,11 +36,19 @@
                 <padding>
                     <Insets top="6" right="8" bottom="6" left="8" />
                 </padding>
-                <TextField fx:id="keywordField" styleClass="search-field"
-                           promptText="キーワードを入力..." minWidth="200"
-                           onAction="#onSearch" />
-                <ComboBox fx:id="tagFilterCombo" promptText="タグ▼" minWidth="120"
-                          onAction="#onTagFilterChanged" />
+                <!-- キーワード入力（×クリアボタン付き） -->
+                <StackPane HBox.hgrow="ALWAYS" maxWidth="400">
+                    <TextField fx:id="keywordField" styleClass="search-field"
+                               promptText="キーワードを入力..." minWidth="150"
+                               style="-fx-padding: 4 24 4 4;"
+                               onAction="#onSearch" />
+                    <Button fx:id="clearKeywordButton" text="×" visible="false"
+                            onAction="#onClearKeyword"
+                            StackPane.alignment="CENTER_RIGHT"
+                            style="-fx-background-color: transparent; -fx-text-fill: #888; -fx-font-size: 13px; -fx-cursor: hand; -fx-padding: 2 6;"
+                            translateX="-4" />
+                </StackPane>
+                <MenuButton fx:id="tagFilterButton" text="すべてのタグ" minWidth="120" />
                 <ComboBox fx:id="authorFilterCombo" promptText="作者▼" minWidth="120"
                           onAction="#onAuthorFilterChanged" />
                 <ToggleButton fx:id="excludeHiddenToggle" text="🚫 非表示除外"
@@ -48,8 +56,9 @@
                 <ComboBox fx:id="starFilterCombo" promptText="☆ Star" minWidth="100"
                           onAction="#onStarFilterChanged" />
                 <Button fx:id="searchButton" text="検索" onAction="#onSearch"
-                        defaultButton="true" />
-                <Button fx:id="saveSearchButton" text="💾 保存" onAction="#onSaveSearch" />
+                        defaultButton="true" minWidth="50" />
+                <Button fx:id="clearSearchButton" text="✕ クリア" onAction="#onClearSearch"
+                        minWidth="60" />
                 <Separator orientation="VERTICAL" />
                 <Label text="保存済み:" />
                 <ComboBox fx:id="savedSearchCombo" promptText="保存済み検索を選択..."
@@ -58,40 +67,40 @@
         </VBox>
     </top>
 
-    <!-- 左側タグツリー -->
-    <left>
-        <VBox minWidth="180" maxWidth="250" prefWidth="200"
-              style="-fx-background-color: #313335; -fx-border-color: #555555; -fx-border-width: 0 1 0 0;">
-            <Label text="タグ" style="-fx-font-weight: bold; -fx-padding: 8 8 4 8; -fx-text-fill: #aaaaaa;" />
-            <TreeView fx:id="tagTreeView" VBox.vgrow="ALWAYS"
-                      onMouseClicked="#onTagTreeClicked"
-                      style="-fx-background-color: #313335;" />
-        </VBox>
-    </left>
-
-    <!-- 中央コンテンツエリア -->
+    <!-- 中央: SplitPane（タグツリー + コンテンツ） -->
     <center>
-        <StackPane fx:id="contentPane">
-            <!-- サムネイルグリッド（ScrollPane内） -->
-            <ScrollPane fx:id="thumbnailScrollPane" fitToWidth="true"
-                        style="-fx-background-color: #3c3f41;">
-                <FlowPane fx:id="thumbnailPane" styleClass="thumbnail-grid"
-                          hgap="8" vgap="8" prefWrapLength="800" />
-            </ScrollPane>
+        <SplitPane fx:id="mainSplitPane" dividerPositions="0.15">
+            <!-- 左: タグツリー -->
+            <VBox SplitPane.resizableWithParent="false" minWidth="120" prefWidth="180"
+                  style="-fx-background-color: #313335; -fx-border-color: #555555; -fx-border-width: 0 1 0 0;">
+                <Label text="タグ" style="-fx-font-weight: bold; -fx-padding: 8 8 4 8; -fx-text-fill: #aaaaaa;" />
+                <TreeView fx:id="tagTreeView" VBox.vgrow="ALWAYS"
+                          onMouseClicked="#onTagTreeClicked"
+                          style="-fx-background-color: #313335;" />
+            </VBox>
+            <!-- 右: 検索結果 -->
+            <StackPane fx:id="contentPane">
+                <!-- サムネイルグリッド（ScrollPane内） -->
+                <ScrollPane fx:id="thumbnailScrollPane" fitToWidth="true"
+                            style="-fx-background-color: #3c3f41;">
+                    <FlowPane fx:id="thumbnailPane" styleClass="thumbnail-grid"
+                              hgap="8" vgap="8" prefWrapLength="800" />
+                </ScrollPane>
 
-            <!-- リスト表示（TableView） -->
-            <TableView fx:id="imageTableView" visible="false">
-                <columns>
-                    <TableColumn fx:id="colFileName" text="ファイル名" prefWidth="250" />
-                    <TableColumn fx:id="colAuthor" text="作者" prefWidth="120" />
-                    <TableColumn fx:id="colStar" text="Star" prefWidth="80" />
-                    <TableColumn fx:id="colTags" text="タグ" prefWidth="200" />
-                    <TableColumn fx:id="colCreatedAt" text="作成日時" prefWidth="150" />
-                    <TableColumn fx:id="colFileSize" text="サイズ" prefWidth="80" />
-                    <TableColumn fx:id="colResolution" text="解像度" prefWidth="100" />
-                </columns>
-            </TableView>
-        </StackPane>
+                <!-- リスト表示（TableView） -->
+                <TableView fx:id="imageTableView" visible="false">
+                    <columns>
+                        <TableColumn fx:id="colFileName" text="ファイル名" prefWidth="250" />
+                        <TableColumn fx:id="colAuthor" text="作者" prefWidth="120" />
+                        <TableColumn fx:id="colStar" text="Star" prefWidth="80" />
+                        <TableColumn fx:id="colTags" text="タグ" prefWidth="200" />
+                        <TableColumn fx:id="colCreatedAt" text="作成日時" prefWidth="150" />
+                        <TableColumn fx:id="colFileSize" text="サイズ" prefWidth="80" />
+                        <TableColumn fx:id="colResolution" text="解像度" prefWidth="100" />
+                    </columns>
+                </TableView>
+            </StackPane>
+        </SplitPane>
     </center>
 
     <!-- 下部ステータスバー -->
