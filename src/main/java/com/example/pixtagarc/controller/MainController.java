@@ -879,6 +879,14 @@ public class MainController implements Initializable {
             }
         }
         log.info("ビューアセッションを{}件復元しました", sessions.size());
+
+        // メイン画面を最後尾に（ビューアが前面に来る）
+        if (!sessions.isEmpty() && mainSplitPane != null && mainSplitPane.getScene() != null) {
+            Stage mainStage = (Stage) mainSplitPane.getScene().getWindow();
+            if (mainStage != null) {
+                Platform.runLater(mainStage::toBack);
+            }
+        }
     }
 
     /**

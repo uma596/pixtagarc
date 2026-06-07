@@ -1055,8 +1055,11 @@ public class ViewerController implements Initializable {
                 session = new com.example.pixtagarc.dto.ViewerSession();
                 session.setMode("search");
             }
-            controller.currentSession = session;
-            com.example.pixtagarc.service.ViewerSessionManager.getInstance().add(session);
+            final com.example.pixtagarc.dto.ViewerSession finalSession = session;
+            controller.currentSession = finalSession;
+            com.example.pixtagarc.service.ViewerSessionManager sessionMgr =
+                    com.example.pixtagarc.service.ViewerSessionManager.getInstance();
+            sessionMgr.add(finalSession);
 
             Stage stage = new Stage();
             String title = imageList.isEmpty() ? "ビューア"
@@ -1071,6 +1074,12 @@ public class ViewerController implements Initializable {
                 stage.setY(session.getWindowY());
             }
             stage.show();
+
+            // ウィンドウ位置/サイズ変更時にセッションを即時更新 (#26)
+            stage.xProperty().addListener((obs, o, n) -> { finalSession.setWindowX(n.doubleValue()); sessionMgr.save(); });
+            stage.yProperty().addListener((obs, o, n) -> { finalSession.setWindowY(n.doubleValue()); sessionMgr.save(); });
+            stage.widthProperty().addListener((obs, o, n) -> { finalSession.setWindowWidth(n.doubleValue()); sessionMgr.save(); });
+            stage.heightProperty().addListener((obs, o, n) -> { finalSession.setWindowHeight(n.doubleValue()); sessionMgr.save(); });
 
             // ウィンドウ閉じる時（タスクバー等）はリソース解放のみ。セッションは残す（次回復元用）
             stage.setOnCloseRequest(event -> {
