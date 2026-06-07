@@ -175,6 +175,9 @@ public class MainController implements Initializable {
     /** 保存済み検索サービス。 */
     private SavedSearchService savedSearchService;
 
+    /** 検索条件履歴サービス。 */
+    private SearchHistoryService searchHistoryService;
+
     /** 画像サービス。 */
     private ImageService imageService;
 
@@ -254,6 +257,9 @@ public class MainController implements Initializable {
         // タグ使用履歴の読み込み
         tagHistory = new TagHistory();
         tagHistory.loadFrom(AppConfig.getInstance().getState(AppConfig.KEY_TAG_HISTORY, ""));
+
+        // 検索条件履歴
+        searchHistoryService = new SearchHistoryService();
     }
 
     /**
@@ -901,15 +907,37 @@ public class MainController implements Initializable {
      * 保存済み検索ComboBoxを読み込む。
      */
     private void loadSavedSearches() {
+        updateSavedSearchCombo();
+    }
+
+    /**
+     * 保存済み検索ComboBoxを再構築する（最近の検索 + 保存済み検索）。
+     */
+    private void updateSavedSearchCombo() {
         try {
-            List<SavedSearch> savedSearches = savedSearchService.findAll();
-            List<String> names = new ArrayList<>();
-            savedSearchIds.clear();
-            for (SavedSearch ss : savedSearches) {
-                names.add(ss.getName());
-                savedSearchIds.add(ss.getId());
+            List<String> items = new ArrayList<>();
+
+            // 最近の検索（先頭）
+            List<SearchCondition> recent = searchHistoryService.getRecent();
+            if (!recent.isEmpty()) {
+                items.add("── 最近の検索 ──");
+                for (SearchCondition c : recent) {
+                    items.add("📋 " + searchHistoryService.buildSummary(c));
+                }
             }
-            savedSearchCombo.setItems(FXCollections.observableArrayList(names));
+
+            // 保存済み検索
+            List<SavedSearch> savedSearches = savedSearchService.findAll();
+            savedSearchIds.clear();
+            if (!savedSearches.isEmpty()) {
+                items.add("── 保存済み ──");
+                for (SavedSearch ss : savedSearches) {
+                    items.add("💾 " + ss.getName());
+                    savedSearchIds.add(ss.getId());
+                }
+            }
+
+            savedSearchCombo.setItems(FXCollections.observableArrayList(items));
         } catch (Exception e) {
             log.error("保存済み検索の読み込みに失敗しました", e);
         }
@@ -923,7 +951,9 @@ public class MainController implements Initializable {
         log.debug("検索を実行します");
         currentPage = 0;
         currentCondition = buildSearchCondition();
+        searchHistoryService.add(currentCondition);
         executeSearch(currentCondition);
+        updateSavedSearchCombo();
         saveCurrentState();
     }
 
@@ -1413,19 +1443,65 @@ public class MainController implements Initializable {
      */
     @FXML
     private void onLoadSavedSearch() {
-        int index = savedSearchCombo.getSelectionModel().getSelectedIndex();
-        if (index >= 0 && index < savedSearchIds.size()) {
-            try {
-                SearchCondition condition = savedSearchService.toSearchCondition(savedSearchIds.get(index));
-                currentCondition = condition;
-                keywordField.setText(condition.getKeyword() != null ? condition.getKeyword() : "");
-                excludeHiddenToggle.setSelected(condition.isExcludeHidden());
-                executeSearch(condition);
-            } catch (Exception e) {
-                log.error("保存済み検索の読み込みに失敗しました", e);
-                showError("読み込みに失敗しました", e.getMessage());
+        String selected = savedSearchCombo.getValue();
+        if (selected == null) return;
+
+        // セパレーター行は無視
+        if (selected.startsWith("──")) return;
+
+        if (selected.startsWith("📋 ")) {
+            // 最近の検索を復元
+            List<SearchCondition> recent = searchHistoryService.getRecent();
+            // ComboBox内の📋アイテムのインデックスを計算
+            int recentIndex = 0;
+            for (int i = 0; i < savedSearchCombo.getItems().size(); i++) {
+                String item = savedSearchCombo.getItems().get(i);
+                if (item.equals(selected)) {
+                    // "── 最近の検索 ──" の後のインデックスを計算
+                    recentIndex = i - 1; // ヘッダー行を引く
+                    break;
+                }
+            }
+            if (recentIndex >= 0 && recentIndex < recent.size()) {
+                applySearchCondition(recent.get(recentIndex));
+            }
+        } else if (selected.startsWith("💾 ")) {
+            // 保存済み検索を復元
+            String name = selected.substring(2).trim();
+            for (int i = 0; i < savedSearchIds.size(); i++) {
+                try {
+                    SearchCondition condition = savedSearchService.toSearchCondition(savedSearchIds.get(i));
+                    currentCondition = condition;
+                    keywordField.setText(condition.getKeyword() != null ? condition.getKeyword() : "");
+                    excludeHiddenToggle.setSelected(condition.isExcludeHidden());
+                    currentPage = 0;
+                    executeSearch(condition);
+                    break;
+                } catch (Exception e) {
+                    log.error("保存済み検索の読み込みに失敗しました", e);
+                }
             }
         }
+    }
+
+    /**
+     * 検索条件をUIに反映して再検索する。
+     *
+     * @param condition 適用する検索条件
+     */
+    private void applySearchCondition(SearchCondition condition) {
+        keywordField.setText(condition.getKeyword() != null ? condition.getKeyword() : "");
+        excludeHiddenToggle.setSelected(condition.isExcludeHidden());
+        // Star フィルター復元
+        if (condition.getMinStar() > 0) {
+            starFilterCombo.setValue("★" + condition.getMinStar() + "以上");
+        } else {
+            starFilterCombo.setValue("すべて");
+        }
+        currentCondition = condition;
+        currentPage = 0;
+        executeSearch(condition);
+        saveCurrentState();
     }
 
     /**
