@@ -217,6 +217,7 @@ Thumbs.db
 
 ## 6. 禁止事項
 
+- `main` / `develop` への直接コミット禁止（バグ修正・軽微な変更を含むすべてのコミットを作業ブランチ経由で行うこと）
 - `main` / `develop` への直接 `git push` 禁止（必ず PR 経由）
 - `git push --force` 禁止（共有ブランチへの強制プッシュ）
   - 自分のみが使う作業ブランチ・Kiro作業ブランチへの `--force-with-lease` は許容
