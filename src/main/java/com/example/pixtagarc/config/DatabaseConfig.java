@@ -182,4 +182,49 @@ public class DatabaseConfig {
             }
         }
     }
+
+    /**
+     * VACUUM を実行して空き領域を解放する。
+     *
+     * <p>大量レコード削除後にファイルサイズを縮小するために使用する。
+     *
+     * @throws RuntimeException VACUUM の実行に失敗した場合
+     */
+    public void vacuum() {
+        try (Statement stmt = getConnection().createStatement()) {
+            stmt.execute("VACUUM");
+            log.info("VACUUM を実行しました");
+        } catch (SQLException e) {
+            log.error("VACUUM の実行に失敗しました", e);
+            throw new RuntimeException("VACUUM の実行に失敗しました", e);
+        }
+    }
+
+    /**
+     * FTS5インデックスを再構築する。
+     *
+     * <p>FTS5仮想テーブルを DROP して再作成することで全件クリアする。
+     * contentless FTS5 テーブルでは 'delete-all' が正しく動作しない場合があるため、
+     * DROP/CREATE で確実にクリアする。
+     *
+     * @throws RuntimeException 再構築に失敗した場合
+     */
+    public void clearFtsIndex() {
+        try (Statement stmt = getConnection().createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS image_fts");
+            stmt.execute("""
+                    CREATE VIRTUAL TABLE IF NOT EXISTS image_fts USING fts5 (
+                        file_name,
+                        tags_text,
+                        author_name,
+                        content='images',
+                        content_rowid='id'
+                    )
+                    """);
+            log.debug("FTS5インデックスを再構築しました");
+        } catch (SQLException e) {
+            log.error("FTS5インデックスの再構築に失敗しました", e);
+            throw new RuntimeException("FTS5インデックスの再構築に失敗しました", e);
+        }
+    }
 }

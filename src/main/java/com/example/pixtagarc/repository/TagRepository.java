@@ -152,7 +152,7 @@ public class TagRepository {
      * @throws RuntimeException データベース操作に失敗した場合
      */
     public List<Tag> findAll() {
-        String sql = "SELECT * FROM tags ORDER BY name";
+        String sql = "SELECT * FROM tags ORDER BY star DESC, name ASC";
         try (PreparedStatement ps = dbConfig.getConnection().prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             List<Tag> tags = new ArrayList<>();
@@ -167,6 +167,26 @@ public class TagRepository {
     }
 
     /**
+     * タグのStar評価を更新する。
+     *
+     * @param id   更新するタグID
+     * @param star Star評価（0〜5）
+     * @throws RuntimeException データベース操作に失敗した場合
+     */
+    public void updateStar(Long id, int star) {
+        String sql = "UPDATE tags SET star=? WHERE id=?";
+        try (PreparedStatement ps = dbConfig.getConnection().prepareStatement(sql)) {
+            ps.setInt(1, star);
+            ps.setLong(2, id);
+            ps.executeUpdate();
+            log.debug("タグStar評価を更新しました: id={}, star={}", id, star);
+        } catch (SQLException e) {
+            log.error("タグStar評価の更新に失敗しました: id={}", id, e);
+            throw new RuntimeException("タグStar評価の更新に失敗しました", e);
+        }
+    }
+
+    /**
      * ResultSetの現在行を {@link Tag} エンティティにマッピングする。
      *
      * @param rs ResultSet
@@ -174,6 +194,6 @@ public class TagRepository {
      * @throws SQLException マッピングに失敗した場合
      */
     private Tag mapRow(ResultSet rs) throws SQLException {
-        return new Tag(rs.getLong("id"), rs.getString("name"));
+        return new Tag(rs.getLong("id"), rs.getString("name"), rs.getInt("star"));
     }
 }

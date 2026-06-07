@@ -187,4 +187,32 @@ public class ThumbnailService {
     public int getCacheSize() {
         return lruCache.size();
     }
+
+    /**
+     * サムネイルキャッシュディレクトリ内の全ファイルを削除し、メモリキャッシュもクリアする。
+     *
+     * <p>全データクリア＆再インポート時に使用する。
+     * ディレクトリ自体は削除後に再作成する。
+     */
+    public void clearAllThumbnails() {
+        lruCache.clear();
+        try {
+            if (Files.exists(cacheDirectory)) {
+                Files.walk(cacheDirectory)
+                        .sorted(java.util.Comparator.reverseOrder())
+                        .forEach(path -> {
+                            try {
+                                Files.deleteIfExists(path);
+                            } catch (IOException e) {
+                                log.warn("サムネイルファイルの削除に失敗しました: {}", path, e);
+                            }
+                        });
+            }
+            Files.createDirectories(cacheDirectory);
+            log.info("サムネイルキャッシュを全削除しました: {}", cacheDirectory);
+        } catch (IOException e) {
+            log.error("サムネイルキャッシュの全削除に失敗しました", e);
+            throw new RuntimeException("サムネイルキャッシュの全削除に失敗しました", e);
+        }
+    }
 }

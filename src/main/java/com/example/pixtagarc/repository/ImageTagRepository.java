@@ -96,6 +96,22 @@ public class ImageTagRepository {
     }
 
     /**
+     * 全タグ紐付けを削除する。
+     *
+     * @throws RuntimeException データベース操作に失敗した場合
+     */
+    public void deleteAll() {
+        String sql = "DELETE FROM image_tags";
+        try (PreparedStatement ps = dbConfig.getConnection().prepareStatement(sql)) {
+            int count = ps.executeUpdate();
+            log.debug("全タグ紐付けを削除しました: count={}", count);
+        } catch (SQLException e) {
+            log.error("全タグ紐付けの削除に失敗しました", e);
+            throw new RuntimeException("全タグ紐付けの削除に失敗しました", e);
+        }
+    }
+
+    /**
      * 指定された画像IDに関連するタグのリストを返す。
      *
      * @param imageId 画像ID
@@ -104,18 +120,18 @@ public class ImageTagRepository {
      */
     public List<Tag> findTagsByImageId(Long imageId) {
         String sql = """
-                SELECT t.id, t.name
+                SELECT t.id, t.name, t.star
                 FROM tags t
                 INNER JOIN image_tags it ON t.id = it.tag_id
                 WHERE it.image_id = ?
-                ORDER BY t.name
+                ORDER BY t.star DESC, t.name ASC
                 """;
         try (PreparedStatement ps = dbConfig.getConnection().prepareStatement(sql)) {
             ps.setLong(1, imageId);
             try (ResultSet rs = ps.executeQuery()) {
                 List<Tag> tags = new ArrayList<>();
                 while (rs.next()) {
-                    tags.add(new Tag(rs.getLong("id"), rs.getString("name")));
+                    tags.add(new Tag(rs.getLong("id"), rs.getString("name"), rs.getInt("star")));
                 }
                 return tags;
             }

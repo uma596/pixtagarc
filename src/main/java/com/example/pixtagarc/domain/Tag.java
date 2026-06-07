@@ -17,6 +17,9 @@ public class Tag {
     /** タグ名。UNIQUE制約あり。 */
     private String name;
 
+    /** Star評価（0〜5）。デフォルトは0。 */
+    private int star = 0;
+
     /**
      * デフォルトコンストラクタ。
      */
@@ -32,6 +35,19 @@ public class Tag {
     public Tag(Long id, String name) {
         this.id = id;
         this.name = name;
+    }
+
+    /**
+     * ID、名前、Starを指定するコンストラクタ。
+     *
+     * @param id   主キー
+     * @param name タグ名
+     * @param star Star評価
+     */
+    public Tag(Long id, String name, int star) {
+        this.id = id;
+        this.name = name;
+        this.star = star;
     }
 
     /**
@@ -79,9 +95,27 @@ public class Tag {
         this.name = name;
     }
 
+    /**
+     * Star評価を返す。
+     *
+     * @return Star評価（0〜5）
+     */
+    public int getStar() {
+        return star;
+    }
+
+    /**
+     * Star評価を設定する。
+     *
+     * @param star Star評価（0〜5）
+     */
+    public void setStar(int star) {
+        this.star = star;
+    }
+
     @Override
     public String toString() {
-        return "Tag{id=" + id + ", name='" + name + "'}";
+        return "Tag{id=" + id + ", name='" + name + "', star=" + star + "}";
     }
 
     @Override

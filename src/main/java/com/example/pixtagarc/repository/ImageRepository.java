@@ -275,6 +275,24 @@ public class ImageRepository {
     }
 
     /**
+     * 全画像を削除する。
+     *
+     * @return 削除された件数
+     * @throws RuntimeException データベース操作に失敗した場合
+     */
+    public int deleteAll() {
+        String sql = "DELETE FROM images";
+        try (PreparedStatement ps = dbConfig.getConnection().prepareStatement(sql)) {
+            int count = ps.executeUpdate();
+            log.debug("全画像を削除しました: count={}", count);
+            return count;
+        } catch (SQLException e) {
+            log.error("全画像の削除に失敗しました", e);
+            throw new RuntimeException("全画像の削除に失敗しました", e);
+        }
+    }
+
+    /**
      * 指定されたIDの画像を返す。
      *
      * @param id 検索する画像ID

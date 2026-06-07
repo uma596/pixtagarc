@@ -46,6 +46,35 @@ public class AppConfig {
     /** サムネイルサイズの設定キー。 */
     public static final String KEY_THUMBNAIL_SIZE = "thumbnail.size";
 
+    // ===== 状態保持キー名 =====
+
+    /** キーワードの状態保持キー。 */
+    public static final String KEY_STATE_KEYWORD = "state.keyword";
+
+    /** タグフィルターの状態保持キー。 */
+    public static final String KEY_STATE_TAG_IDS = "state.tag_ids";
+
+    /** 作者フィルターの状態保持キー。 */
+    public static final String KEY_STATE_AUTHOR_FILTER = "state.author_filter";
+
+    /** Starフィルターの状態保持キー。 */
+    public static final String KEY_STATE_STAR_FILTER = "state.star_filter";
+
+    /** 非表示除外の状態保持キー。 */
+    public static final String KEY_STATE_EXCLUDE_HIDDEN = "state.exclude_hidden";
+
+    /** 現在ページの状態保持キー。 */
+    public static final String KEY_STATE_CURRENT_PAGE = "state.current_page";
+
+    /** ページサイズの状態保持キー。 */
+    public static final String KEY_STATE_PAGE_SIZE = "state.page_size";
+
+    /** 表示モードの状態保持キー。 */
+    public static final String KEY_STATE_DISPLAY_MODE = "state.display_mode";
+
+    /** サムネイルサイズの状態保持キー。 */
+    public static final String KEY_STATE_THUMBNAIL_SIZE = "state.thumbnail_size";
+
     // ===== 定数 =====
 
     /** サムネイル小サイズ（ピクセル）。 */
@@ -168,6 +197,42 @@ public class AppConfig {
         properties.setProperty(KEY_THUMBNAIL_SIZE, sizeName);
         saveSettings();
         log.info("サムネイルサイズを更新しました: {}", sizeName);
+    }
+
+    // ===== 状態保持アクセサ =====
+
+    /**
+     * 状態プロパティを取得する。
+     *
+     * @param key          プロパティキー
+     * @param defaultValue デフォルト値
+     * @return プロパティ値（未設定の場合はデフォルト値）
+     */
+    public String getState(String key, String defaultValue) {
+        return properties.getProperty(key, defaultValue);
+    }
+
+    /**
+     * 状態プロパティを設定して即時保存する。
+     *
+     * @param key   プロパティキー
+     * @param value プロパティ値
+     */
+    public void setState(String key, String value) {
+        properties.setProperty(key, value != null ? value : "");
+        saveSettings();
+    }
+
+    /**
+     * 状態プロパティを一括設定して保存する（複数キーをまとめて1回の書き込み）。
+     *
+     * @param entries キーと値のマップ
+     */
+    public void setStates(java.util.Map<String, String> entries) {
+        for (java.util.Map.Entry<String, String> entry : entries.entrySet()) {
+            properties.setProperty(entry.getKey(), entry.getValue() != null ? entry.getValue() : "");
+        }
+        saveSettings();
     }
 
     // ===== static ユーティリティメソッド =====

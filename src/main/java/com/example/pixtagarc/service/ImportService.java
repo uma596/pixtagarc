@@ -102,6 +102,15 @@ public class ImportService extends Task<Void> {
     /** 既存ファイルをスキップするかどうか。 */
     private final boolean skipExisting;
 
+    /** 全データクリア後に再インポートするかどうか。 */
+    private final boolean clearAll;
+
+    /** 作者リポジトリ（クリア処理用）。 */
+    private final com.example.pixtagarc.repository.AuthorRepository authorRepository;
+
+    /** データベース設定（VACUUM用）。 */
+    private final com.example.pixtagarc.config.DatabaseConfig dbConfig;
+
     /**
      * ディレクトリごとのメタデータキャッシュ。
      *
@@ -126,23 +135,32 @@ public class ImportService extends Task<Void> {
      * @param imageTagRepository 画像-タグ中間テーブルリポジトリ
      * @param tagService         タグサービス
      * @param authorService      作者サービス
+     * @param authorRepository   作者リポジトリ（クリア処理用）
+     * @param dbConfig           データベース設定（VACUUM用）
      * @param rootDirectory      インポート対象のルートディレクトリ
      * @param recursive          サブフォルダを含める場合 {@code true}
      * @param skipExisting       既存ファイルをスキップする場合 {@code true}
+     * @param clearAll           全データクリア後に再インポートする場合 {@code true}
      */
     public ImportService(ImageRepository imageRepository, ThumbnailService thumbnailService,
                          WorkRepository workRepository, ImageTagRepository imageTagRepository,
                          TagService tagService, AuthorService authorService,
-                         Path rootDirectory, boolean recursive, boolean skipExisting) {
+                         com.example.pixtagarc.repository.AuthorRepository authorRepository,
+                         com.example.pixtagarc.config.DatabaseConfig dbConfig,
+                         Path rootDirectory, boolean recursive, boolean skipExisting,
+                         boolean clearAll) {
         this.imageRepository = imageRepository;
         this.thumbnailService = thumbnailService;
         this.workRepository = workRepository;
         this.imageTagRepository = imageTagRepository;
         this.tagService = tagService;
         this.authorService = authorService;
+        this.authorRepository = authorRepository;
+        this.dbConfig = dbConfig;
         this.rootDirectory = rootDirectory;
         this.recursive = recursive;
         this.skipExisting = skipExisting;
+        this.clearAll = clearAll;
     }
 
     /**
@@ -163,7 +181,14 @@ public class ImportService extends Task<Void> {
      */
     @Override
     protected Void call() throws Exception {
-        log.info("インポートを開始します: directory={}, recursive={}", rootDirectory, recursive);
+        log.info("インポートを開始します: directory={}, recursive={}, clearAll={}", rootDirectory, recursive, clearAll);
+
+        // 全データクリア処理
+        if (clearAll) {
+            updateMessage("全データをクリア中...");
+            performClearAll();
+        }
+
         updateMessage("ファイルをスキャン中...");
 
         // ファイル総数を先にカウント（リストをメモリに乗せない）
@@ -306,6 +331,39 @@ public class ImportService extends Task<Void> {
                         return FileVisitResult.CONTINUE;
                     }
                 });
+    }
+
+    /**
+     * 全データクリア処理を実行する。
+     *
+     * <p>FTS5インデックス → image_tags → images → works → authors の順で削除し、
+     * サムネイルキャッシュを全削除した後にVACUUMを実行する。
+     */
+    private void performClearAll() {
+        log.info("全データクリアを開始します");
+
+        // 1. FTS5 インデックスをクリア
+        dbConfig.clearFtsIndex();
+
+        // 2. 画像-タグ紐付けを削除
+        imageTagRepository.deleteAll();
+
+        // 3. 画像を全削除
+        imageRepository.deleteAll();
+
+        // 4. 作品を全削除
+        workRepository.deleteAll();
+
+        // 5. 作者を全削除（タグマスタは残す）
+        authorRepository.deleteAll();
+
+        // 6. サムネイルキャッシュを全削除
+        thumbnailService.clearAllThumbnails();
+
+        // 7. VACUUM
+        dbConfig.vacuum();
+
+        log.info("全データクリアが完了しました");
     }
 
     /**

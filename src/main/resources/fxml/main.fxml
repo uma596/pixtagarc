@@ -96,14 +96,23 @@
 
     <!-- 下部ステータスバー -->
     <bottom>
-        <HBox styleClass="status-bar" alignment="CENTER_LEFT" spacing="16">
+        <HBox styleClass="status-bar" alignment="CENTER_LEFT" spacing="12">
             <padding>
                 <Insets top="4" right="8" bottom="4" left="8" />
             </padding>
-            <Label fx:id="totalCountLabel" text="件数: 0 件" />
-            <Label fx:id="displayRangeLabel" text="表示: 0 件" />
+            <Button fx:id="prevPageButton" text="← 前へ" onAction="#onPrevPage" disable="true"
+                    minWidth="50" style="-fx-font-size: 11px;" />
+            <Label fx:id="pageInfoLabel" text="ページ 1 / 1" style="-fx-font-size: 11px;" />
+            <Button fx:id="nextPageButton" text="次へ →" onAction="#onNextPage" disable="true"
+                    minWidth="50" style="-fx-font-size: 11px;" />
+            <Separator orientation="VERTICAL" />
+            <Label text="表示:" style="-fx-font-size: 11px;" />
+            <ComboBox fx:id="pageSizeCombo" onAction="#onPageSizeChanged"
+                      style="-fx-font-size: 11px;" prefWidth="80" />
+            <Separator orientation="VERTICAL" />
+            <Label fx:id="totalCountLabel" text="件数: 0 件" style="-fx-font-size: 11px;" />
             <Region HBox.hgrow="ALWAYS" />
-            <Label fx:id="statusMessageLabel" text="" />
+            <Label fx:id="statusMessageLabel" text="" style="-fx-font-size: 11px;" />
         </HBox>
     </bottom>
 

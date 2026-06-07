@@ -129,4 +129,15 @@ public class TagService {
     public Optional<Tag> findByName(String name) {
         return tagRepository.findByName(name);
     }
+
+    /**
+     * タグのStar評価を更新する。
+     *
+     * @param tagId タグID
+     * @param star  Star評価（0〜5）
+     */
+    public void updateStar(Long tagId, int star) {
+        log.info("タグStar評価を更新します: id={}, star={}", tagId, star);
+        tagRepository.updateStar(tagId, star);
+    }
 }

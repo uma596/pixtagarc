@@ -100,6 +100,22 @@ public class AuthorRepository {
     }
 
     /**
+     * 全作者を削除する。
+     *
+     * @throws RuntimeException データベース操作に失敗した場合
+     */
+    public void deleteAll() {
+        String sql = "DELETE FROM authors";
+        try (PreparedStatement ps = dbConfig.getConnection().prepareStatement(sql)) {
+            int count = ps.executeUpdate();
+            log.debug("全作者を削除しました: count={}", count);
+        } catch (SQLException e) {
+            log.error("全作者の削除に失敗しました", e);
+            throw new RuntimeException("全作者の削除に失敗しました", e);
+        }
+    }
+
+    /**
      * 指定されたIDの作者を返す。
      *
      * @param id 検索する作者ID

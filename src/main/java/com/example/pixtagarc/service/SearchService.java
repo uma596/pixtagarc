@@ -345,6 +345,54 @@ public class SearchService {
     }
 
     /**
+     * ビューア向けに全件検索する（タグ名取得なし・軽量版）。
+     *
+     * <p>メイン画面のページングとは独立して全検索結果にアクセスする。
+     * タグ名はビューア表示時に1件ずつ遅延取得する。
+     *
+     * @param condition 検索条件（page/pageSizeは無視して全件取得）
+     * @return 画像サマリーのリスト（タグ名なし）
+     */
+    public List<ImageSummary> searchForViewer(SearchCondition condition) {
+        log.debug("ビューア向け全件検索を実行します: keyword={}", condition.getKeyword());
+
+        try {
+            StringBuilder sql = new StringBuilder();
+            List<Object> params = new ArrayList<>();
+
+            sql.append("""
+                    SELECT DISTINCT i.id, i.file_path, i.file_name, i.file_size,
+                        i.width, i.height, i.media_type, i.is_hidden, i.created_at,
+                        i.work_id, i.page_number, i.star,
+                        a.name AS author_name
+                    FROM images i
+                    LEFT JOIN authors a ON i.author_id = a.id
+                    LEFT JOIN works w ON i.work_id = w.id
+                    """);
+            appendJoins(sql, params, condition);
+            appendWhereClause(sql, params, condition);
+            appendOrderBy(sql, condition);
+            // LIMITなし — 全件取得
+
+            try (PreparedStatement ps = dbConfig.getConnection().prepareStatement(sql.toString())) {
+                setParameters(ps, params);
+                try (ResultSet rs = ps.executeQuery()) {
+                    List<ImageSummary> results = new ArrayList<>();
+                    while (rs.next()) {
+                        results.add(mapToSummary(rs));
+                        // タグ名は取得しない（遅延取得）
+                    }
+                    log.debug("ビューア向け全件検索完了: {}件", results.size());
+                    return results;
+                }
+            }
+        } catch (SQLException e) {
+            log.error("ビューア向け検索に失敗しました", e);
+            throw new RuntimeException("ビューア向け検索に失敗しました", e);
+        }
+    }
+
+    /**
      * 指定された画像IDのタグ名リストを返す。
      *
      * @param imageId 画像ID

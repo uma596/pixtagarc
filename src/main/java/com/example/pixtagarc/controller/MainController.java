@@ -136,8 +136,17 @@ public class MainController implements Initializable {
     /** 総件数ラベル。 */
     @FXML private Label totalCountLabel;
 
-    /** 表示範囲ラベル。 */
-    @FXML private Label displayRangeLabel;
+    /** ページ情報ラベル。 */
+    @FXML private Label pageInfoLabel;
+
+    /** 前ページボタン。 */
+    @FXML private Button prevPageButton;
+
+    /** 次ページボタン。 */
+    @FXML private Button nextPageButton;
+
+    /** ページサイズComboBox。 */
+    @FXML private ComboBox<String> pageSizeCombo;
 
     /** ステータスメッセージラベル。 */
     @FXML private Label statusMessageLabel;
@@ -175,6 +184,9 @@ public class MainController implements Initializable {
 
     /** 保存済み検索のIDリスト（ComboBoxのインデックスと対応）。 */
     private List<Long> savedSearchIds = new ArrayList<>();
+
+    /** 現在のページ番号（0始まり）。 */
+    private int currentPage = 0;
 
     /**
      * サムネイル生成専用のバックグラウンドスレッドプール。
@@ -238,6 +250,10 @@ public class MainController implements Initializable {
         thumbnailSizeCombo.setItems(FXCollections.observableArrayList("小", "中", "大"));
         thumbnailSizeCombo.setValue("中");
 
+        // ページサイズComboBoxの初期値
+        pageSizeCombo.setItems(FXCollections.observableArrayList("200", "500", "1000"));
+        pageSizeCombo.setValue("200");
+
         // Star フィルター ComboBox の初期値
         starFilterCombo.setItems(FXCollections.observableArrayList(
                 "すべて", "★1以上", "★2以上", "★3以上", "★4以上", "★5のみ"));
@@ -267,8 +283,7 @@ public class MainController implements Initializable {
             if (event.getClickCount() == 2) {
                 ImageSummary selected = imageTableView.getSelectionModel().getSelectedItem();
                 if (selected != null && currentSearchResult != null) {
-                    int index = currentSearchResult.getItems().indexOf(selected);
-                    ViewerController.openNewWindow(currentSearchResult.getItems(), index);
+                    openViewerWithFullResults(selected);
                 }
             }
         });
@@ -296,8 +311,7 @@ public class MainController implements Initializable {
         openViewer.setOnAction(e -> {
             ImageSummary selected = getSelectedImage();
             if (selected != null && currentSearchResult != null) {
-                int index = currentSearchResult.getItems().indexOf(selected);
-                ViewerController.openNewWindow(currentSearchResult.getItems(), index);
+                openViewerWithFullResults(selected);
             }
         });
 
@@ -544,6 +558,31 @@ public class MainController implements Initializable {
     }
 
     /**
+     * ビューアを全件検索結果で開く。
+     *
+     * <p>現在の検索条件で全件再検索（タグ名なし軽量版）し、
+     * 指定画像の位置から表示を開始する。
+     *
+     * @param startItem 表示開始画像
+     */
+    private void openViewerWithFullResults(ImageSummary startItem) {
+        try {
+            List<ImageSummary> fullResults = searchService.searchForViewer(currentCondition);
+            int index = 0;
+            for (int i = 0; i < fullResults.size(); i++) {
+                if (fullResults.get(i).getId().equals(startItem.getId())) {
+                    index = i;
+                    break;
+                }
+            }
+            ViewerController.openNewWindow(fullResults, index);
+        } catch (Exception ex) {
+            log.error("ビューアの起動に失敗しました", ex);
+            showError("ビューアの起動に失敗しました", ex.getMessage());
+        }
+    }
+
+    /**
      * 初期データを読み込む。
      */
     private void loadInitialData() {
@@ -551,8 +590,11 @@ public class MainController implements Initializable {
         loadAuthorFilter();
         loadTagFilter();
         loadSavedSearches();
-        // 初期検索（全件）
-        onSearch();
+        // 状態復元（検索条件・ページ・表示モード）
+        restoreState();
+        // 復元した条件で検索実行
+        currentCondition = buildSearchCondition();
+        executeSearch(currentCondition);
     }
 
     /**
@@ -628,8 +670,10 @@ public class MainController implements Initializable {
     @FXML
     private void onSearch() {
         log.debug("検索を実行します");
+        currentPage = 0;
         currentCondition = buildSearchCondition();
         executeSearch(currentCondition);
+        saveCurrentState();
     }
 
     /**
@@ -644,8 +688,23 @@ public class MainController implements Initializable {
         condition.setMinStar(resolveMinStar());
         condition.setSortColumn(viewState.getSortColumn());
         condition.setSortOrder(viewState.getSortOrder());
-        // AppConfigから検索上限件数を取得（設定変更がリアルタイムに反映される）
-        condition.setPageSize(AppConfig.getInstance().getSearchLimit());
+        condition.setPage(currentPage);
+        condition.setPageSize(getPageSize());
+
+        // タグフィルター: 選択中のタグ名からIDを解決
+        String selectedTag = tagFilterCombo.getValue();
+        if (selectedTag != null && !"すべてのタグ".equals(selectedTag)) {
+            tagService.findByName(selectedTag).ifPresent(tag ->
+                    condition.setTagIds(List.of(tag.getId())));
+        }
+
+        // 作者フィルター: 選択中の作者名からIDを解決
+        String selectedAuthor = authorFilterCombo.getValue();
+        if (selectedAuthor != null && !"すべての作者".equals(selectedAuthor)) {
+            authorService.findByName(selectedAuthor).ifPresent(author ->
+                    condition.setAuthorIds(List.of(author.getId())));
+        }
+
         return condition;
     }
 
@@ -686,8 +745,8 @@ public class MainController implements Initializable {
      * @param result 検索結果
      */
     private void updateUI(SearchResult result) {
-        totalCountLabel.setText("件数: " + String.format("%,d", result.getTotalCount()) + " 件");
-        displayRangeLabel.setText("表示: " + result.getItems().size() + " 件");
+        totalCountLabel.setText("全 " + String.format("%,d", result.getTotalCount()) + " 件");
+        updatePageNavigation();
 
         if (viewState.getDisplayMode() == MainViewState.DisplayMode.THUMBNAIL) {
             updateThumbnailView(result.getItems());
@@ -744,8 +803,7 @@ public class MainController implements Initializable {
         // ダブルクリックでビューアを開く
         cell.setOnMouseClicked(event -> {
             if (event.getClickCount() == 2 && currentSearchResult != null) {
-                int index = currentSearchResult.getItems().indexOf(item);
-                ViewerController.openNewWindow(currentSearchResult.getItems(), index);
+                openViewerWithFullResults(item);
             }
         });
 
@@ -819,6 +877,7 @@ public class MainController implements Initializable {
         if (currentSearchResult != null) {
             updateThumbnailView(currentSearchResult.getItems());
         }
+        saveCurrentState();
     }
 
     /**
@@ -834,6 +893,7 @@ public class MainController implements Initializable {
         if (currentSearchResult != null) {
             updateListView(currentSearchResult.getItems());
         }
+        saveCurrentState();
     }
 
     /**
@@ -877,6 +937,142 @@ public class MainController implements Initializable {
     @FXML
     private void onStarFilterChanged() {
         onSearch();
+    }
+
+    /**
+     * 前のページへ移動する。
+     */
+    @FXML
+    private void onPrevPage() {
+        if (currentPage > 0) {
+            currentPage--;
+            currentCondition.setPage(currentPage);
+            executeSearch(currentCondition);
+            thumbnailScrollPane.setVvalue(0);
+            saveCurrentState();
+        }
+    }
+
+    /**
+     * 次のページへ移動する。
+     */
+    @FXML
+    private void onNextPage() {
+        if (currentSearchResult != null) {
+            int totalPages = (int) Math.ceil((double) currentSearchResult.getTotalCount() / getPageSize());
+            if (currentPage < totalPages - 1) {
+                currentPage++;
+                currentCondition.setPage(currentPage);
+                executeSearch(currentCondition);
+                thumbnailScrollPane.setVvalue(0);
+                saveCurrentState();
+            }
+        }
+    }
+
+    /**
+     * ページサイズが変更された際の処理。
+     */
+    @FXML
+    private void onPageSizeChanged() {
+        currentPage = 0;
+        onSearch();
+    }
+
+    /**
+     * ページナビゲーションUIを更新する。
+     */
+    private void updatePageNavigation() {
+        if (currentSearchResult == null) return;
+        long totalCount = currentSearchResult.getTotalCount();
+        int pageSize = getPageSize();
+        int totalPages = Math.max(1, (int) Math.ceil((double) totalCount / pageSize));
+
+        pageInfoLabel.setText(String.format("ページ %d / %d", currentPage + 1, totalPages));
+        prevPageButton.setDisable(currentPage <= 0);
+        nextPageButton.setDisable(currentPage >= totalPages - 1);
+    }
+
+    /**
+     * 現在選択中のページサイズを返す。
+     *
+     * @return ページサイズ（200/500/1000）
+     */
+    private int getPageSize() {
+        String selected = pageSizeCombo.getValue();
+        if ("500".equals(selected)) return 500;
+        if ("1000".equals(selected)) return 1000;
+        return 200;
+    }
+
+    /**
+     * 現在の検索条件・表示状態を即時保存する。
+     *
+     * <p>異常終了時でも状態が失われないよう、状態変更のたびに呼び出す。
+     */
+    private void saveCurrentState() {
+        AppConfig config = AppConfig.getInstance();
+        java.util.Map<String, String> states = new java.util.LinkedHashMap<>();
+        states.put(AppConfig.KEY_STATE_KEYWORD, keywordField.getText());
+        states.put(AppConfig.KEY_STATE_AUTHOR_FILTER,
+                authorFilterCombo.getValue() != null ? authorFilterCombo.getValue() : "すべての作者");
+        states.put(AppConfig.KEY_STATE_STAR_FILTER,
+                starFilterCombo.getValue() != null ? starFilterCombo.getValue() : "すべて");
+        states.put(AppConfig.KEY_STATE_EXCLUDE_HIDDEN, String.valueOf(excludeHiddenToggle.isSelected()));
+        states.put(AppConfig.KEY_STATE_CURRENT_PAGE, String.valueOf(currentPage));
+        states.put(AppConfig.KEY_STATE_PAGE_SIZE,
+                pageSizeCombo.getValue() != null ? pageSizeCombo.getValue() : "200");
+        states.put(AppConfig.KEY_STATE_DISPLAY_MODE, viewState.getDisplayMode().name());
+        states.put(AppConfig.KEY_STATE_THUMBNAIL_SIZE,
+                thumbnailSizeCombo.getValue() != null ? thumbnailSizeCombo.getValue() : "中");
+        config.setStates(states);
+    }
+
+    /**
+     * 保存された状態をUIに復元する。
+     *
+     * <p>起動時に {@code initialize()} から呼び出す。
+     */
+    private void restoreState() {
+        AppConfig config = AppConfig.getInstance();
+        try {
+            String keyword = config.getState(AppConfig.KEY_STATE_KEYWORD, "");
+            keywordField.setText(keyword);
+
+            String authorFilter = config.getState(AppConfig.KEY_STATE_AUTHOR_FILTER, "すべての作者");
+            if (authorFilterCombo.getItems().contains(authorFilter)) {
+                authorFilterCombo.setValue(authorFilter);
+            }
+
+            String starFilter = config.getState(AppConfig.KEY_STATE_STAR_FILTER, "すべて");
+            starFilterCombo.setValue(starFilter);
+
+            boolean excludeHidden = Boolean.parseBoolean(
+                    config.getState(AppConfig.KEY_STATE_EXCLUDE_HIDDEN, "true"));
+            excludeHiddenToggle.setSelected(excludeHidden);
+
+            currentPage = Integer.parseInt(
+                    config.getState(AppConfig.KEY_STATE_CURRENT_PAGE, "0"));
+
+            String pageSize = config.getState(AppConfig.KEY_STATE_PAGE_SIZE, "200");
+            pageSizeCombo.setValue(pageSize);
+
+            String displayMode = config.getState(AppConfig.KEY_STATE_DISPLAY_MODE, "THUMBNAIL");
+            if ("LIST".equals(displayMode)) {
+                viewState.setDisplayMode(MainViewState.DisplayMode.LIST);
+                thumbnailScrollPane.setVisible(false);
+                imageTableView.setVisible(true);
+                listViewButton.setSelected(true);
+                thumbnailViewButton.setSelected(false);
+            }
+
+            String thumbSize = config.getState(AppConfig.KEY_STATE_THUMBNAIL_SIZE, "中");
+            thumbnailSizeCombo.setValue(thumbSize);
+
+            log.info("アプリ状態を復元しました: keyword={}, page={}", keyword, currentPage);
+        } catch (Exception e) {
+            log.warn("状態の復元に失敗しました（デフォルト値を使用します）", e);
+        }
     }
 
     /**

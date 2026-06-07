@@ -53,6 +53,9 @@ public class ImportController implements Initializable {
     /** 既存スキップチェックボックス。 */
     @FXML private CheckBox skipExistingCheckBox;
 
+    /** 全データクリアチェックボックス。 */
+    @FXML private CheckBox clearAllCheckBox;
+
     /** 進捗ラベル。 */
     @FXML private Label progressLabel;
 
@@ -87,6 +90,16 @@ public class ImportController implements Initializable {
             Thread t = new Thread(r, "import-thread");
             t.setDaemon(true);
             return t;
+        });
+
+        // 全クリアON時は既存スキップを無効化
+        clearAllCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal) {
+                skipExistingCheckBox.setSelected(false);
+                skipExistingCheckBox.setDisable(true);
+            } else {
+                skipExistingCheckBox.setDisable(false);
+            }
         });
     }
 
@@ -140,6 +153,22 @@ public class ImportController implements Initializable {
         TagService tagService = new TagService(tagRepository, imageTagRepository);
         AuthorService authorService = new AuthorService(authorRepository);
 
+        boolean clearAll = clearAllCheckBox.isSelected();
+
+        // 全クリア時は確認ダイアログを表示
+        if (clearAll) {
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+            confirm.setTitle("全データクリア");
+            confirm.setHeaderText("⚠ 全データをクリアします");
+            confirm.setContentText("画像メタデータ・タグ紐付け・作品情報・サムネイルキャッシュが全て削除されます。\n"
+                    + "タグマスタ（タグ名の定義）は保持されます。\n\n"
+                    + "この操作は元に戻せません。続行しますか？");
+            var result = confirm.showAndWait();
+            if (result.isEmpty() || result.get() != javafx.scene.control.ButtonType.OK) {
+                return;
+            }
+        }
+
         currentTask = new ImportService(
                 imageRepository,
                 thumbnailService,
@@ -147,9 +176,12 @@ public class ImportController implements Initializable {
                 imageTagRepository,
                 tagService,
                 authorService,
+                authorRepository,
+                dbConfig,
                 Paths.get(folderPath),
                 recursiveCheckBox.isSelected(),
-                skipExistingCheckBox.isSelected()
+                skipExistingCheckBox.isSelected(),
+                clearAll
         );
 
         // ProgressBarとラベルをタスクにバインド
