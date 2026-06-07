@@ -18,6 +18,8 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
@@ -26,6 +28,7 @@ import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.awt.Desktop;
 import java.io.File;
 import java.net.URL;
 import java.util.ArrayList;
@@ -156,6 +159,9 @@ public class MainController implements Initializable {
     /** 保存済み検索サービス。 */
     private SavedSearchService savedSearchService;
 
+    /** 画像サービス。 */
+    private ImageService imageService;
+
     // ===== 状態 =====
 
     /** メイン画面の表示状態。 */
@@ -221,6 +227,7 @@ public class MainController implements Initializable {
         tagService = new TagService(tagRepository, imageTagRepository);
         authorService = new AuthorService(authorRepository);
         savedSearchService = new SavedSearchService(savedSearchRepository);
+        imageService = new ImageService(imageRepository);
     }
 
     /**
@@ -271,6 +278,269 @@ public class MainController implements Initializable {
         root.setExpanded(true);
         tagTreeView.setRoot(root);
         tagTreeView.setShowRoot(false);
+
+        // コンテキストメニューの設定
+        setupContextMenu();
+    }
+
+    /**
+     * 検索結果のコンテキストメニューを設定する。
+     *
+     * <p>サムネイルセルおよびTableViewの右クリックで操作メニューを表示する。
+     * メニュー項目はビューア画面と同等の操作を提供する。
+     */
+    private void setupContextMenu() {
+        ContextMenu contextMenu = new ContextMenu();
+
+        MenuItem openViewer = new MenuItem("ビューアで開く");
+        openViewer.setOnAction(e -> {
+            ImageSummary selected = getSelectedImage();
+            if (selected != null && currentSearchResult != null) {
+                int index = currentSearchResult.getItems().indexOf(selected);
+                ViewerController.openNewWindow(currentSearchResult.getItems(), index);
+            }
+        });
+
+        MenuItem openWork = new MenuItem("作品を表示");
+        openWork.setOnAction(e -> onOpenWorkFromMain());
+
+        MenuItem editTags = new MenuItem("タグを編集...");
+        editTags.setOnAction(e -> onEditTagsFromMain());
+
+        MenuItem toggleHidden = new MenuItem("非表示にする");
+        toggleHidden.setOnAction(e -> onToggleHiddenFromMain());
+
+        // Star 設定サブメニュー
+        Menu starMenu = new Menu("Star を設定");
+        String[] starLabels = {"☆ なし", "★ 1", "★★ 2", "★★★ 3", "★★★★ 4", "★★★★★ 5"};
+        for (int i = 0; i <= 5; i++) {
+            final int starValue = i;
+            MenuItem starItem = new MenuItem(starLabels[i]);
+            starItem.setOnAction(e -> {
+                ImageSummary selected = getSelectedImage();
+                if (selected != null) {
+                    try {
+                        imageService.updateStar(selected.getId(), starValue);
+                        selected.setStar(starValue);
+                        statusMessageLabel.setText("Star評価を更新しました: " + selected.getFileName());
+                    } catch (Exception ex) {
+                        log.error("Star評価の更新に失敗しました", ex);
+                    }
+                }
+            });
+            starMenu.getItems().add(starItem);
+        }
+
+        MenuItem copyPath = new MenuItem("ファイルパスをコピー");
+        copyPath.setOnAction(e -> {
+            ImageSummary selected = getSelectedImage();
+            if (selected != null) {
+                ClipboardContent content = new ClipboardContent();
+                content.putString(selected.getFilePath());
+                Clipboard.getSystemClipboard().setContent(content);
+                statusMessageLabel.setText("パスをコピーしました: " + selected.getFileName());
+            }
+        });
+
+        MenuItem openInExplorer = new MenuItem("エクスプローラーで表示");
+        openInExplorer.setOnAction(e -> {
+            ImageSummary selected = getSelectedImage();
+            if (selected != null) {
+                try {
+                    File file = new File(selected.getFilePath());
+                    if (file.exists()) {
+                        Desktop.getDesktop().open(file.getParentFile());
+                    }
+                } catch (Exception ex) {
+                    log.error("エクスプローラーの起動に失敗しました", ex);
+                }
+            }
+        });
+
+        MenuItem deleteImage = new MenuItem("画像をDBから削除...");
+        deleteImage.setOnAction(e -> onDeleteImageFromMain());
+
+        contextMenu.getItems().addAll(
+                openViewer,
+                openWork,
+                new SeparatorMenuItem(),
+                editTags,
+                toggleHidden,
+                starMenu,
+                new SeparatorMenuItem(),
+                copyPath,
+                openInExplorer,
+                new SeparatorMenuItem(),
+                deleteImage
+        );
+
+        // TableViewにコンテキストメニューを設定
+        imageTableView.setContextMenu(contextMenu);
+
+        // コンテキストメニュー表示時に動的にラベルを更新
+        contextMenu.setOnShowing(e -> {
+            ImageSummary selected = getSelectedImage();
+            if (selected != null) {
+                toggleHidden.setText(selected.isHidden() ? "非表示を解除" : "非表示にする");
+                openWork.setDisable(selected.getWorkId() == null);
+            } else {
+                openWork.setDisable(true);
+            }
+        });
+
+        // サムネイル用のコンテキストメニューを保持（createThumbnailCellで使用）
+        this.thumbnailContextMenu = contextMenu;
+    }
+
+    /** サムネイルセルに右クリックメニューを提供するためのコンテキストメニュー参照。 */
+    private ContextMenu thumbnailContextMenu;
+
+    /** コンテキストメニュー操作時に対象となる画像（サムネイルで右クリックされた画像）。 */
+    private ImageSummary contextMenuTarget;
+
+    /**
+     * 現在選択中（または右クリックされた）画像を返す。
+     *
+     * <p>サムネイル表示時は {@code contextMenuTarget}、リスト表示時はTableViewの選択行を返す。
+     *
+     * @return 選択中の画像サマリー（選択なしの場合は {@code null}）
+     */
+    private ImageSummary getSelectedImage() {
+        if (viewState.getDisplayMode() == MainViewState.DisplayMode.THUMBNAIL) {
+            return contextMenuTarget;
+        } else {
+            return imageTableView.getSelectionModel().getSelectedItem();
+        }
+    }
+
+    /**
+     * メイン画面から作品を表示する。
+     *
+     * <p>選択中の画像が所属する作品の全ページを取得し、新しいビューアウィンドウで開く。
+     */
+    private void onOpenWorkFromMain() {
+        ImageSummary selected = getSelectedImage();
+        if (selected == null || selected.getWorkId() == null) return;
+
+        try {
+            DatabaseConfig dbConfig = DatabaseConfig.getInstance();
+            ImageRepository imageRepository = new ImageRepository(dbConfig);
+            List<com.example.pixtagarc.domain.Image> workImages =
+                    imageRepository.findByWorkId(selected.getWorkId());
+
+            List<ImageSummary> summaryList = new ArrayList<>();
+            int currentPageIndex = 0;
+            for (int i = 0; i < workImages.size(); i++) {
+                com.example.pixtagarc.domain.Image img = workImages.get(i);
+                ImageSummary s = new ImageSummary();
+                s.setId(img.getId());
+                s.setFilePath(img.getFilePath());
+                s.setFileName(img.getFileName());
+                s.setFileSize(img.getFileSize());
+                s.setWidth(img.getWidth());
+                s.setHeight(img.getHeight());
+                s.setMediaType(img.getMediaType());
+                s.setHidden(img.isHidden());
+                s.setCreatedAt(img.getCreatedAt());
+                s.setStar(img.getStar());
+                s.setWorkId(img.getWorkId());
+                s.setPageNumber(img.getPageNumber());
+                s.setTagNames(new ArrayList<>());
+                summaryList.add(s);
+                if (img.getId().equals(selected.getId())) {
+                    currentPageIndex = i;
+                }
+            }
+
+            if (!summaryList.isEmpty()) {
+                ViewerController.openNewWindow(summaryList, currentPageIndex);
+                log.info("作品を表示しました: workId={}, pages={}", selected.getWorkId(), summaryList.size());
+            }
+        } catch (Exception ex) {
+            log.error("作品の表示に失敗しました", ex);
+            showError("作品表示に失敗しました", ex.getMessage());
+        }
+    }
+
+    /**
+     * メイン画面からタグを編集する。
+     *
+     * <p>選択中の画像のタグを編集するダイアログを開く。
+     */
+    private void onEditTagsFromMain() {
+        ImageSummary selected = getSelectedImage();
+        if (selected == null) return;
+
+        try {
+            FXMLLoader loader = new FXMLLoader(
+                    getClass().getResource("/fxml/tag-edit.fxml"));
+            Parent root = loader.load();
+            TagEditController controller = loader.getController();
+            controller.setImageId(selected.getId());
+            Stage stage = new Stage();
+            stage.setTitle("タグ編集 - " + selected.getFileName());
+            stage.setScene(new Scene(root));
+            stage.initModality(Modality.APPLICATION_MODAL);
+            stage.showAndWait();
+            // タグ編集後に再検索して結果を反映
+            onSearch();
+            loadTagTree();
+            loadTagFilter();
+        } catch (Exception ex) {
+            log.error("タグ編集ダイアログの表示に失敗しました", ex);
+            showError("タグ編集に失敗しました", ex.getMessage());
+        }
+    }
+
+    /**
+     * メイン画面から非表示フラグを切り替える。
+     */
+    private void onToggleHiddenFromMain() {
+        ImageSummary selected = getSelectedImage();
+        if (selected == null) return;
+
+        try {
+            boolean newState = !selected.isHidden();
+            imageService.updateHidden(selected.getId(), newState);
+            selected.setHidden(newState);
+            statusMessageLabel.setText(
+                    (newState ? "非表示にしました: " : "非表示を解除しました: ") + selected.getFileName());
+            // 非表示除外フィルターが有効な場合は再検索
+            if (excludeHiddenToggle.isSelected()) {
+                onSearch();
+            }
+        } catch (Exception ex) {
+            log.error("非表示フラグの切り替えに失敗しました", ex);
+            showError("非表示の切り替えに失敗しました", ex.getMessage());
+        }
+    }
+
+    /**
+     * メイン画面から画像をDBから削除する（確認ダイアログ付き）。
+     */
+    private void onDeleteImageFromMain() {
+        ImageSummary selected = getSelectedImage();
+        if (selected == null) return;
+
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("画像の削除");
+        confirm.setHeaderText("画像をDBから削除しますか？");
+        confirm.setContentText("「" + selected.getFileName() + "」をDBから削除します。\n"
+                + "ファイル自体は削除されません。");
+        confirm.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.OK) {
+                try {
+                    DatabaseConfig dbConfig = DatabaseConfig.getInstance();
+                    ImageRepository imageRepository = new ImageRepository(dbConfig);
+                    imageRepository.deleteById(selected.getId());
+                    statusMessageLabel.setText("画像を削除しました: " + selected.getFileName());
+                    onSearch(); // 再検索して結果を更新
+                } catch (Exception ex) {
+                    log.error("画像の削除に失敗しました", ex);
+                    showError("画像の削除に失敗しました", ex.getMessage());
+                }
+            }
+        });
     }
 
     /**
@@ -477,6 +747,15 @@ public class MainController implements Initializable {
                 int index = currentSearchResult.getItems().indexOf(item);
                 ViewerController.openNewWindow(currentSearchResult.getItems(), index);
             }
+        });
+
+        // 右クリックでコンテキストメニューを表示
+        cell.setOnContextMenuRequested(event -> {
+            contextMenuTarget = item;
+            if (thumbnailContextMenu != null) {
+                thumbnailContextMenu.show(cell, event.getScreenX(), event.getScreenY());
+            }
+            event.consume();
         });
 
         // 画像ファイルのみバックグラウンドでサムネイルを生成・読み込む

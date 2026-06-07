@@ -1,8 +1,14 @@
 package com.example.pixtagarc.controller;
 
 import com.example.pixtagarc.config.DatabaseConfig;
+import com.example.pixtagarc.repository.AuthorRepository;
 import com.example.pixtagarc.repository.ImageRepository;
+import com.example.pixtagarc.repository.ImageTagRepository;
+import com.example.pixtagarc.repository.TagRepository;
+import com.example.pixtagarc.repository.WorkRepository;
+import com.example.pixtagarc.service.AuthorService;
 import com.example.pixtagarc.service.ImportService;
+import com.example.pixtagarc.service.TagService;
 import com.example.pixtagarc.service.ThumbnailService;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
@@ -127,10 +133,20 @@ public class ImportController implements Initializable {
         DatabaseConfig dbConfig = DatabaseConfig.getInstance();
         ImageRepository imageRepository = new ImageRepository(dbConfig);
         ThumbnailService thumbnailService = new ThumbnailService();
+        WorkRepository workRepository = new WorkRepository(dbConfig);
+        ImageTagRepository imageTagRepository = new ImageTagRepository(dbConfig);
+        TagRepository tagRepository = new TagRepository(dbConfig);
+        AuthorRepository authorRepository = new AuthorRepository(dbConfig);
+        TagService tagService = new TagService(tagRepository, imageTagRepository);
+        AuthorService authorService = new AuthorService(authorRepository);
 
         currentTask = new ImportService(
                 imageRepository,
                 thumbnailService,
+                workRepository,
+                imageTagRepository,
+                tagService,
+                authorService,
                 Paths.get(folderPath),
                 recursiveCheckBox.isSelected(),
                 skipExistingCheckBox.isSelected()

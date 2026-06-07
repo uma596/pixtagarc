@@ -1,24 +1,38 @@
 package com.example.pixtagarc.service;
 
 import com.example.pixtagarc.config.AppConfig;
+import com.example.pixtagarc.domain.Author;
 import com.example.pixtagarc.domain.Image;
+import com.example.pixtagarc.domain.Tag;
+import com.example.pixtagarc.domain.Work;
+import com.example.pixtagarc.dto.ImportMetadata;
 import com.example.pixtagarc.repository.ImageRepository;
+import com.example.pixtagarc.repository.ImageTagRepository;
+import com.example.pixtagarc.repository.WorkRepository;
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 import javafx.concurrent.Task;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * インポートサービスクラス。
@@ -26,6 +40,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>フォルダをスキャンして画像・動画ファイルをデータベースに登録する。
  * JavaFX {@link Task} を継承しており、ProgressBarとのバインドが可能。
  * ExecutorServiceで並列処理を行い、インポートを高速化する。
+ *
+ * <p>画像ファイルと同名の {@code -meta.json} ファイルが存在する場合は、
+ * JSON内のタグ・作者・作品情報を自動的に付与する。
  *
  * @author pixtagarc
  * @since 1.0.0
@@ -39,11 +56,42 @@ public class ImportService extends Task<Void> {
     private static final DateTimeFormatter DATETIME_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
+    /**
+     * ファイル名から作品IDとページ番号を抽出する正規表現パターン。
+     *
+     * <p>例: {@code 143716458_p0003-作品タイトル.jpg} → group(1)="143716458", group(2)="0003"
+     */
+    private static final Pattern WORK_FILE_PATTERN =
+            Pattern.compile("^(\\d+)_p(\\d{4})-(.+?)\\.[^.]+$");
+
+    /**
+     * メタデータJSON用ファイル名パターン。
+     *
+     * <p>例: {@code 143716458_p0000-作品タイトル-meta.json}
+     */
+    private static final Pattern META_JSON_PATTERN =
+            Pattern.compile("^(\\d+)_p0000-(.+)-meta\\.json$");
+
+    /** Gsonインスタンス（スレッドセーフ）。 */
+    private static final Gson GSON = new Gson();
+
     /** 画像リポジトリ。 */
     private final ImageRepository imageRepository;
 
     /** サムネイルサービス。 */
     private final ThumbnailService thumbnailService;
+
+    /** 作品リポジトリ。 */
+    private final WorkRepository workRepository;
+
+    /** 画像-タグ中間テーブルリポジトリ。 */
+    private final ImageTagRepository imageTagRepository;
+
+    /** タグサービス。 */
+    private final TagService tagService;
+
+    /** 作者サービス。 */
+    private final AuthorService authorService;
 
     /** インポート対象のルートディレクトリ。 */
     private final Path rootDirectory;
@@ -55,18 +103,43 @@ public class ImportService extends Task<Void> {
     private final boolean skipExisting;
 
     /**
+     * ディレクトリごとのメタデータキャッシュ。
+     *
+     * <p>キーは「作品ID（外部ID文字列）」、値はパース済みメタデータ。
+     * 同一作品IDの複数ページで同じメタデータを再利用するためキャッシュする。
+     */
+    private final ConcurrentHashMap<String, ImportMetadata> metadataCache = new ConcurrentHashMap<>();
+
+    /**
+     * 作品IDに対するDBでのWorkエンティティのキャッシュ。
+     *
+     * <p>同一作品IDの複数ページで作品レコードの二重作成を防ぐ。
+     */
+    private final ConcurrentHashMap<String, Work> workCache = new ConcurrentHashMap<>();
+
+    /**
      * コンストラクタ。
      *
-     * @param imageRepository  画像リポジトリ
-     * @param thumbnailService サムネイルサービス
-     * @param rootDirectory    インポート対象のルートディレクトリ
-     * @param recursive        サブフォルダを含める場合 {@code true}
-     * @param skipExisting     既存ファイルをスキップする場合 {@code true}
+     * @param imageRepository    画像リポジトリ
+     * @param thumbnailService   サムネイルサービス
+     * @param workRepository     作品リポジトリ
+     * @param imageTagRepository 画像-タグ中間テーブルリポジトリ
+     * @param tagService         タグサービス
+     * @param authorService      作者サービス
+     * @param rootDirectory      インポート対象のルートディレクトリ
+     * @param recursive          サブフォルダを含める場合 {@code true}
+     * @param skipExisting       既存ファイルをスキップする場合 {@code true}
      */
     public ImportService(ImageRepository imageRepository, ThumbnailService thumbnailService,
+                         WorkRepository workRepository, ImageTagRepository imageTagRepository,
+                         TagService tagService, AuthorService authorService,
                          Path rootDirectory, boolean recursive, boolean skipExisting) {
         this.imageRepository = imageRepository;
         this.thumbnailService = thumbnailService;
+        this.workRepository = workRepository;
+        this.imageTagRepository = imageTagRepository;
+        this.tagService = tagService;
+        this.authorService = authorService;
         this.rootDirectory = rootDirectory;
         this.recursive = recursive;
         this.skipExisting = skipExisting;
@@ -77,6 +150,13 @@ public class ImportService extends Task<Void> {
      *
      * <p>バックグラウンドスレッドで実行される。
      * 進捗はProgressBarにバインドされたプロパティを通じて更新される。
+     *
+     * <p>処理の流れ:
+     * <ol>
+     *   <li>サポートファイルの総数をカウント</li>
+     *   <li>メタデータJSON（{@code -meta.json}）をプリスキャンしてキャッシュ</li>
+     *   <li>画像ファイルを並列でインポート（メタデータ適用含む）</li>
+     * </ol>
      *
      * @return null
      * @throws Exception インポート処理に失敗した場合
@@ -94,6 +174,12 @@ public class ImportService extends Task<Void> {
             updateMessage("インポート対象のファイルが見つかりませんでした");
             return null;
         }
+
+        // メタデータJSONのプリスキャン
+        updateMessage("メタデータJSONをスキャン中...");
+        prescanMetadataFiles();
+        log.info("メタデータスキャン完了: {}件のメタデータを読み込みました", metadataCache.size());
+
         updateMessage(total + " ファイルが見つかりました。インポート中...");
 
         // 並列インポート処理
@@ -181,6 +267,48 @@ public class ImportService extends Task<Void> {
     }
 
     /**
+     * ルートディレクトリ内のメタデータJSONファイルをプリスキャンしてキャッシュに格納する。
+     *
+     * <p>{@code {作品ID}_p0000-{タイトル}-meta.json} パターンに一致するファイルを探し、
+     * Gsonでパースして作品IDをキーとしてキャッシュする。
+     *
+     * @throws IOException ファイルスキャンに失敗した場合
+     */
+    private void prescanMetadataFiles() throws IOException {
+        int maxDepth = recursive ? Integer.MAX_VALUE : 1;
+        Files.walkFileTree(rootDirectory, java.util.Set.of(), maxDepth,
+                new SimpleFileVisitor<>() {
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                        String fileName = file.getFileName().toString();
+                        Matcher matcher = META_JSON_PATTERN.matcher(fileName);
+                        if (matcher.matches()) {
+                            String workExternalId = matcher.group(1);
+                            try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                                ImportMetadata metadata = GSON.fromJson(reader, ImportMetadata.class);
+                                if (metadata != null) {
+                                    metadataCache.put(workExternalId, metadata);
+                                    log.debug("メタデータを読み込みました: workId={}, title={}",
+                                            workExternalId, metadata.getTitle());
+                                }
+                            } catch (JsonSyntaxException e) {
+                                log.warn("メタデータJSONのパースに失敗しました（スキップ）: {}", file, e);
+                            } catch (IOException e) {
+                                log.warn("メタデータJSONの読み込みに失敗しました（スキップ）: {}", file, e);
+                            }
+                        }
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    @Override
+                    public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                        log.warn("ファイルへのアクセスに失敗しました: {}", file, exc);
+                        return FileVisitResult.CONTINUE;
+                    }
+                });
+    }
+
+    /**
      * ルートディレクトリ内のサポートファイル数をカウントする。
      *
      * <p>全ファイルパスをリストに持たず件数のみ返すことでメモリを節約する。
@@ -219,6 +347,8 @@ public class ImportService extends Task<Void> {
      * 単一ファイルをインポートする。
      *
      * <p>メタデータを取得してDBに登録し、サムネイルを生成する。
+     * ファイル名が作品パターンに一致し、対応するメタデータJSONが存在する場合は
+     * 作品・タグ・作者情報を自動付与する。
      *
      * @param file         インポートするファイルのパス
      * @param skipExisting 既存ファイルをスキップする場合 {@code true}
@@ -248,6 +378,26 @@ public class ImportService extends Task<Void> {
         String createdAtStr = createdAt.format(DATETIME_FORMATTER);
         String importedAtStr = LocalDateTime.now().format(DATETIME_FORMATTER);
 
+        // ファイル名から作品ID・ページ番号を抽出
+        Matcher workMatcher = WORK_FILE_PATTERN.matcher(fileName);
+        String workExternalId = null;
+        Integer pageNumber = null;
+
+        if (workMatcher.matches()) {
+            workExternalId = workMatcher.group(1);
+            // ページ番号は0始まり→1始まりに変換
+            pageNumber = Integer.parseInt(workMatcher.group(2)) + 1;
+        }
+
+        // メタデータから日時を取得（JSONのdateフィールドがあれば優先）
+        ImportMetadata metadata = (workExternalId != null) ? metadataCache.get(workExternalId) : null;
+        if (metadata != null && metadata.getDate() != null) {
+            String parsedDate = parseIso8601ToLocal(metadata.getDate());
+            if (parsedDate != null) {
+                createdAtStr = parsedDate;
+            }
+        }
+
         // 画像の場合は解像度を取得（フルデコードを避けてメモリ節約）
         Integer width = null;
         Integer height = null;
@@ -276,6 +426,19 @@ public class ImportService extends Task<Void> {
             }
         }
 
+        // 作品・作者情報を取得（メタデータがある場合）
+        Long workId = null;
+        Long authorId = null;
+
+        if (metadata != null && workExternalId != null) {
+            // 作者を取得または作成
+            authorId = resolveAuthorId(metadata);
+
+            // 作品を取得または作成
+            Work work = resolveWork(workExternalId, metadata, authorId);
+            workId = work.getId();
+        }
+
         // DBに登録
         Image image = new Image();
         image.setFilePath(filePath);
@@ -284,14 +447,32 @@ public class ImportService extends Task<Void> {
         image.setWidth(width);
         image.setHeight(height);
         image.setMediaType(mediaType);
+        image.setAuthorId(authorId);
+        image.setWorkId(workId);
+        image.setPageNumber(pageNumber);
         image.setHidden(false);
         image.setCreatedAt(createdAtStr);
         image.setImportedAt(importedAtStr);
-        imageRepository.save(image);
 
-        // FTS5インデックスに追加（トリガーを使わず手動で挿入）
+        // synchronizedで画像登録（SQLiteの同時書き込み対策）
+        synchronized (imageRepository) {
+            imageRepository.save(image);
+        }
+
+        // タグを付与（メタデータがある場合）
+        if (metadata != null && metadata.getTags() != null && !metadata.getTags().isEmpty()) {
+            applyTags(image.getId(), metadata.getTags());
+        }
+
+        // FTS5インデックスに追加
         try {
-            imageRepository.insertFts(image.getId(), fileName, "", "");
+            String tagsText = (metadata != null && metadata.getTags() != null)
+                    ? String.join(" ", metadata.getTags()) : "";
+            String authorName = (metadata != null && metadata.getUser() != null)
+                    ? metadata.getUser() : "";
+            synchronized (imageRepository) {
+                imageRepository.insertFts(image.getId(), fileName, tagsText, authorName);
+            }
         } catch (Exception e) {
             log.warn("FTS5インデックスへの追加に失敗しました（インポートは継続）: {}", filePath, e);
         }
@@ -308,5 +489,126 @@ public class ImportService extends Task<Void> {
 
         log.debug("ファイルをインポートしました: {}", filePath);
         return true;
+    }
+
+    /**
+     * メタデータから作者IDを解決する。
+     *
+     * <p>作者名が存在する場合、既存の作者を検索し、なければ新規作成する。
+     * スレッドセーフに作者の作成/取得を行う。
+     *
+     * @param metadata インポートメタデータ
+     * @return 作者ID（作者情報がない場合は {@code null}）
+     */
+    private Long resolveAuthorId(ImportMetadata metadata) {
+        if (metadata.getUser() == null || metadata.getUser().trim().isEmpty()) {
+            return null;
+        }
+        synchronized (authorService) {
+            Author author = authorService.createOrGet(metadata.getUser().trim());
+            return author.getId();
+        }
+    }
+
+    /**
+     * 作品を解決する（キャッシュから取得、またはDBから検索/新規作成）。
+     *
+     * <p>同一外部IDの作品が複数回参照されてもDB上で1レコードのみ作成されるよう、
+     * キャッシュを使って二重作成を防ぐ。
+     *
+     * @param workExternalId 作品の外部ID文字列
+     * @param metadata       インポートメタデータ
+     * @param authorId       作者ID（nullable）
+     * @return 作品エンティティ（ID付き）
+     */
+    private Work resolveWork(String workExternalId, ImportMetadata metadata, Long authorId) {
+        // キャッシュに存在する場合はそのまま返す
+        Work cached = workCache.get(workExternalId);
+        if (cached != null) {
+            return cached;
+        }
+
+        synchronized (workRepository) {
+            // ダブルチェック — 他スレッドが先に作成した可能性
+            cached = workCache.get(workExternalId);
+            if (cached != null) {
+                return cached;
+            }
+
+            // DB上に既に存在するか検索
+            Optional<Work> existing = workRepository.findByExternalId(workExternalId);
+            if (existing.isPresent()) {
+                workCache.put(workExternalId, existing.get());
+                return existing.get();
+            }
+
+            // 新規作成
+            String now = LocalDateTime.now().format(DATETIME_FORMATTER);
+            String workCreatedAt = now;
+            if (metadata.getDate() != null) {
+                String parsed = parseIso8601ToLocal(metadata.getDate());
+                if (parsed != null) {
+                    workCreatedAt = parsed;
+                }
+            }
+
+            Work work = new Work();
+            work.setTitle(metadata.getTitle() != null ? metadata.getTitle() : "Untitled");
+            work.setAuthorId(authorId);
+            work.setExternalId(workExternalId);
+            work.setTotalPages(metadata.getPageCount());
+            work.setCreatedAt(workCreatedAt);
+            work.setUpdatedAt(now);
+            workRepository.save(work);
+
+            workCache.put(workExternalId, work);
+            log.info("作品を登録しました: externalId={}, title={}", workExternalId, work.getTitle());
+            return work;
+        }
+    }
+
+    /**
+     * 画像にタグを付与する。
+     *
+     * <p>タグ名ごとに既存タグを検索し、なければ新規作成してから画像に紐付ける。
+     *
+     * @param imageId  画像ID
+     * @param tagNames タグ名リスト
+     */
+    private void applyTags(Long imageId, List<String> tagNames) {
+        for (String tagName : tagNames) {
+            if (tagName == null || tagName.trim().isEmpty()) continue;
+            try {
+                Tag tag;
+                synchronized (tagService) {
+                    tag = tagService.createOrGet(tagName.trim());
+                }
+                synchronized (imageTagRepository) {
+                    imageTagRepository.addTag(imageId, tag.getId());
+                }
+            } catch (Exception e) {
+                log.warn("タグの付与に失敗しました（スキップ）: imageId={}, tag={}",
+                        imageId, tagName, e);
+            }
+        }
+    }
+
+    /**
+     * ISO8601形式の日時文字列をローカル日時文字列に変換する。
+     *
+     * <p>タイムゾーン情報を考慮してシステムタイムゾーンのローカル日時に変換する。
+     *
+     * @param iso8601 ISO8601形式の日時文字列（例: "2026-04-18T15:07:00+00:00"）
+     * @return ローカル日時文字列（yyyy-MM-dd'T'HH:mm:ss形式）、パース失敗時は {@code null}
+     */
+    private String parseIso8601ToLocal(String iso8601) {
+        try {
+            OffsetDateTime odt = OffsetDateTime.parse(iso8601);
+            LocalDateTime localDt = odt.atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
+            return localDt.format(DATETIME_FORMATTER);
+        } catch (DateTimeParseException e) {
+            log.debug("ISO8601日時のパースに失敗しました: {}", iso8601, e);
+            return null;
+        }
     }
 }
