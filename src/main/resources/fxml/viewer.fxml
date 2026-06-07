@@ -13,11 +13,11 @@
 
     <!-- 上部ToolBar -->
     <top>
-        <VBox>
+        <VBox fx:id="topInfoBar">
             <ToolBar styleClass="viewer-toolbar">
-                <!-- ページ送りボタン -->
-                <Button fx:id="prevButton" text="← 前" onAction="#onPrev" />
-                <Button fx:id="nextButton" text="→ 次" onAction="#onNext" />
+                <!-- ページ送りボタン（矢印のみ #35） -->
+                <Button fx:id="prevButton" text="←" onAction="#onPrev" minWidth="32" />
+                <Button fx:id="nextButton" text="→" onAction="#onNext" minWidth="32" />
                 <Separator orientation="VERTICAL" />
 
                 <!-- ファイル名・ページ番号 -->
@@ -82,12 +82,24 @@
             <!-- 動画再生エリア（VLCJのCanvas埋め込み用） -->
             <Pane fx:id="videoPane" visible="false"
                   style="-fx-background-color: #000000;" />
+
+            <!-- VLCJ無効時プレースホルダー (#18) -->
+            <VBox fx:id="videoUnavailablePane" alignment="CENTER" spacing="8" visible="false">
+                <Label text="🚫" style="-fx-font-size: 48px;" />
+                <Label text="動画を再生できません" style="-fx-font-size: 16px; -fx-text-fill: #888;" />
+                <Label text="VLC Media Player をインストールしてください"
+                       style="-fx-font-size: 12px; -fx-text-fill: #aaa;" />
+            </VBox>
+
+            <!-- 読み込み中スピナー (#17) -->
+            <ProgressIndicator fx:id="loadingSpinner" visible="false"
+                               maxWidth="64" maxHeight="64" />
         </StackPane>
     </center>
 
     <!-- 下部情報バー -->
     <bottom>
-        <VBox styleClass="viewer-info-bar">
+        <VBox fx:id="bottomInfoBar" styleClass="viewer-info-bar">
             <!-- タグ行 -->
             <HBox spacing="6" alignment="CENTER_LEFT">
                 <padding>
@@ -109,7 +121,7 @@
                           minWidth="150" onAction="#onAuthorChanged" />
                 <Separator orientation="VERTICAL" />
                 <Label text="Star:" style="-fx-text-fill: #aaaaaa;" />
-                <HBox fx:id="starPane" spacing="2" alignment="CENTER_LEFT" />
+                <HBox fx:id="starPane" spacing="2" alignment="CENTER_LEFT" minWidth="120" />
                 <Separator orientation="VERTICAL" />
                 <Label text="パス:" style="-fx-text-fill: #aaaaaa;" />
                 <Label fx:id="filePathLabel" text=""

@@ -49,6 +49,15 @@ public class VideoPlayerService {
     }
 
     /**
+     * VLCJが利用可能かどうかを返す。
+     *
+     * @return 利用可能な場合 {@code true}
+     */
+    public boolean isAvailable() {
+        return mediaPlayer != null;
+    }
+
+    /**
      * MediaPlayerFactoryとEmbeddedMediaPlayerをリフレクション経由で初期化する。
      */
     private void initializePlayer() {

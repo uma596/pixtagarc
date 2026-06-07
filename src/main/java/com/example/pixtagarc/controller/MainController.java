@@ -641,7 +641,12 @@ public class MainController implements Initializable {
                     break;
                 }
             }
-            ViewerController.openNewWindow(fullResults, index);
+            // タグ変更コールバック: メイン画面のタグリストを即時更新 (#28)
+            Runnable onTagChanged = () -> Platform.runLater(() -> {
+                loadTagTree();
+                loadTagFilter();
+            });
+            ViewerController.openNewWindow(fullResults, index, onTagChanged);
         } catch (Exception ex) {
             log.error("ビューアの起動に失敗しました", ex);
             showError("ビューアの起動に失敗しました", ex.getMessage());
